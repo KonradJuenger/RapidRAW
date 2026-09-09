@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "Selector BB: Desactiva WGPU en los Ajustes.",
       "whiteBalance": "Balance de blancos"
     },
+    "colorWarper": {
+      "axisAngle": "Ángulo del eje",
+      "colorSpace": "Espacio de color",
+      "densityHint": "Cambiar la densidad de la cuadrícula vuelve a muestrear la deformación actual.",
+      "grid": "Cuadrícula",
+      "help": "Arrastra nodos; Ctrl/Cmd amplía la selección. Mayús/Alt permite ajustes finos. Tab enfoca, Espacio selecciona y las flechas mueven. Ambos planos comparten la luminosidad del eje neutro. Los botones inferiores restablecen nodos, un plano o todo.",
+      "lock": "Bloquear nodos seleccionados",
+      "nodeLabel": "Nodo: fila {{row}}, columna {{column}}",
+      "planeA": "Plano A · croma → / luminosidad ↑",
+      "planeB": "Plano B · croma → / luminosidad ↑",
+      "range": "Rango",
+      "rangeHint": "Intervalo máximo de croma de la cuadrícula y la vista previa.",
+      "resetAll": "Restablecer todo",
+      "resetPlane": "Restablecer plano activo",
+      "resetSelected": "Restablecer nodos seleccionados",
+      "unlock": "Desbloquear nodos seleccionados",
+      "unsupported": "Este estado del deformador de color utiliza una versión o un espacio de color no compatibles. Restablécelo para editarlo."
+    },
     "curves": {
       "channelTitle": "Canal {{channel}}",
       "channels": {
@@ -319,6 +337,7 @@
       "sections": {
         "basic": "Básico",
         "color": "Color",
+        "colorWarper": "Deformador de color",
         "curves": "Curvas",
         "details": "Detalles",
         "effects": "Efectos"

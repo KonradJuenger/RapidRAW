@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import BasicAdjustments from '../../adjustments/Basic';
 import CurveGraph from '../../adjustments/Curves';
+import ColorWarper from '../../adjustments/ColorWarper';
 import ColorPanel from '../../adjustments/Color';
 import DetailsPanel from '../../adjustments/Details';
 import EffectsPanel from '../../adjustments/Effects';
@@ -277,12 +278,16 @@ export default function Controls() {
             const SectionComponent: any = {
               basic: BasicAdjustments,
               curves: CurveGraph,
+              colorWarper: ColorWarper,
               color: ColorPanel,
               details: DetailsPanel,
               effects: EffectsPanel,
             }[sectionName];
 
-            const title = t(`editor.adjustments.sections.${sectionName}`);
+            const title =
+              sectionName === 'colorWarper'
+                ? t('editor.adjustments.sections.colorWarper')
+                : t(`editor.adjustments.sections.${sectionName}`);
             const sectionVisibility = adjustments.sectionVisibility || INITIAL_ADJUSTMENTS.sectionVisibility;
 
             return (
@@ -295,18 +300,25 @@ export default function Controls() {
                   onToggleVisibility={() => handleToggleVisibility(sectionName)}
                   title={title}
                 >
-                  <SectionComponent
-                    adjustments={adjustments}
-                    setAdjustments={setAdjustments}
-                    histogram={histogram}
-                    theme={theme}
-                    handleLutSelect={handleLutSelect}
-                    onLutHover={setLutPreviewOverride}
-                    appSettings={appSettings}
-                    isWbPickerActive={isWbPickerActive}
-                    toggleWbPicker={toggleWbPicker}
-                    onDragStateChange={onDragStateChange}
-                  />
+                  {(sectionName !== 'colorWarper' || collapsibleSectionsState.colorWarper) && (
+                    <SectionComponent
+                      key={
+                        sectionName === 'colorWarper'
+                          ? selectedImage.path + ':' + adjustments.colorWarper.gridSize
+                          : sectionName
+                      }
+                      adjustments={adjustments}
+                      setAdjustments={setAdjustments}
+                      histogram={histogram}
+                      theme={theme}
+                      handleLutSelect={handleLutSelect}
+                      onLutHover={setLutPreviewOverride}
+                      appSettings={appSettings}
+                      isWbPickerActive={isWbPickerActive}
+                      toggleWbPicker={toggleWbPicker}
+                      onDragStateChange={onDragStateChange}
+                    />
+                  )}
                 </CollapsibleSection>
               </div>
             );

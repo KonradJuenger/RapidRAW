@@ -68,6 +68,7 @@ pub struct PreviewJob {
     pub target_resolution: Option<u32>,
     pub roi: Option<(f32, f32, f32, f32)>,
     pub request_analytics: bool,
+    pub color_warper_request_id: Option<String>,
     pub compute_waveform: bool,
     pub active_waveform_channel: Option<String>,
     pub responder: tokio::sync::oneshot::Sender<Vec<u8>>,
@@ -78,9 +79,20 @@ pub struct AnalyticsJob {
     pub image: Arc<DynamicImage>,
     pub compute_waveform: bool,
     pub active_waveform_channel: Option<String>,
+    pub color_warper_distribution: Option<ColorWarperDistribution>,
+    pub color_warper_request_id: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColorWarperDistribution {
+    pub width: u32,
+    pub height: u32,
+    pub planes: [Vec<f32>; 2],
 }
 
 pub struct AnalyticsConfig {
+    pub color_warper_request_id: Option<String>,
     pub path: String,
     pub compute_waveform: bool,
     pub active_waveform_channel: Option<String>,

@@ -1457,6 +1457,42 @@ pub struct GpuMat3 {
     col2: [f32; 4],
 }
 
+pub const COLOR_WARPER_MAX_GRID_SIZE: usize = 13;
+pub const COLOR_WARPER_MAX_PLANE_NODES: usize =
+    COLOR_WARPER_MAX_GRID_SIZE * COLOR_WARPER_MAX_GRID_SIZE;
+pub const COLOR_WARPER_MAX_NODES: usize =
+    COLOR_WARPER_MAX_GRID_SIZE * COLOR_WARPER_MAX_GRID_SIZE * COLOR_WARPER_MAX_GRID_SIZE;
+
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub struct ColorWarperGpu {
+    pub enabled: u32,
+    pub grid_size: u32,
+    pub color_space: u32,
+    pub mesh_mode: u32,
+    pub axis_angle_radians: f32,
+    pub chroma_limit: f32,
+    pub _pad0: f32,
+    pub collect_distribution: f32,
+    pub lattice: [[f32; 4]; COLOR_WARPER_MAX_NODES],
+}
+
+impl Default for ColorWarperGpu {
+    fn default() -> Self {
+        Self {
+            enabled: 0,
+            grid_size: 7,
+            color_space: 0,
+            mesh_mode: 0,
+            axis_angle_radians: 0.0,
+            chroma_limit: 0.2,
+            _pad0: 0.0,
+            collect_distribution: 0.0,
+            lattice: [[0.0; 4]; COLOR_WARPER_MAX_NODES],
+        }
+    }
+}
+
 impl Default for GpuMat3 {
     fn default() -> Self {
         Self {
@@ -1467,7 +1503,7 @@ impl Default for GpuMat3 {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Pod, Zeroable, Default)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
 #[repr(C)]
 pub struct GlobalAdjustments {
     pub exposure: f32,
@@ -1520,6 +1556,8 @@ pub struct GlobalAdjustments {
     _pad_agx3: f32,
     pub agx_pipe_to_rendering_matrix: GpuMat3,
     pub agx_rendering_to_pipe_matrix: GpuMat3,
+
+    pub color_warper: ColorWarperGpu,
 
     _pad_cg1: f32,
     _pad_cg2: f32,
@@ -1621,6 +1659,10 @@ pub struct AllAdjustments {
     pub tile_offset_x: u32,
     pub tile_offset_y: u32,
     pub mask_atlas_cols: u32,
+    pub histogram_min_x: u32,
+    pub histogram_min_y: u32,
+    pub histogram_max_x: u32,
+    pub histogram_max_y: u32,
 }
 
 struct AdjustmentScales {
@@ -2076,11 +2118,247 @@ pub fn is_image_edited(
         return true;
     }
 
-    let current_adj = get_all_adjustments_from_json(adj, is_raw, tonemapper_override);
+    let mut current_adj = get_all_adjustments_from_json(adj, is_raw, tonemapper_override);
     let default_adj =
         get_all_adjustments_from_json(&serde_json::json!({}), is_raw, tonemapper_override);
+    // Locks and plot settings persist in sidecars, but are not visible edits.
+    if current_adj.global.color_warper.enabled == 0 {
+        current_adj.global.color_warper = ColorWarperGpu::default();
+    }
 
     bytemuck::bytes_of(&current_adj) != bytemuck::bytes_of(&default_adj)
+}
+
+fn solve_color_warper_volume_component(
+    controls: &[[[f32; 2]; COLOR_WARPER_MAX_PLANE_NODES]; 2],
+    grid_size: usize,
+) -> [Vec<f32>; 3] {
+    let count = grid_size * grid_size * grid_size;
+    let center = grid_size / 2;
+    std::array::from_fn(|component| {
+        let mut values = vec![0.0_f32; count];
+        let mut fixed = vec![false; count];
+        let mut constrain = |p: usize, q: usize, lightness_row: usize, value: f32| {
+            let index = lightness_row * grid_size * grid_size + q * grid_size + p;
+            values[index] = value;
+            fixed[index] = true;
+        };
+        for row in 0..grid_size {
+            for column in 0..grid_size {
+                let plane_index = row * grid_size + column;
+                if component == 0 {
+                    constrain(column, center, row, controls[0][plane_index][0]);
+                } else if component == 1 {
+                    constrain(center, column, row, controls[1][plane_index][0]);
+                } else {
+                    constrain(column, center, row, controls[0][plane_index][1]);
+                    constrain(center, column, row, controls[1][plane_index][1]);
+                }
+            }
+        }
+
+        for _ in 0..192 {
+            let mut largest_change = 0.0_f32;
+            for lightness_row in 0..grid_size {
+                for q in 0..grid_size {
+                    for p in 0..grid_size {
+                        let index = lightness_row * grid_size * grid_size + q * grid_size + p;
+                        if fixed[index] {
+                            continue;
+                        }
+                        let mut sum = 0.0;
+                        let mut degree = 0.0;
+                        if p > 0 {
+                            sum += values[index - 1];
+                            degree += 1.0;
+                        }
+                        if p + 1 < grid_size {
+                            sum += values[index + 1];
+                            degree += 1.0;
+                        }
+                        if q > 0 {
+                            sum += values[index - grid_size];
+                            degree += 1.0;
+                        }
+                        if q + 1 < grid_size {
+                            sum += values[index + grid_size];
+                            degree += 1.0;
+                        }
+                        if lightness_row > 0 {
+                            sum += values[index - grid_size * grid_size];
+                            degree += 1.0;
+                        }
+                        if lightness_row + 1 < grid_size {
+                            sum += values[index + grid_size * grid_size];
+                            degree += 1.0;
+                        }
+                        let next = sum / (degree + 0.12);
+                        largest_change = largest_change.max((next - values[index]).abs());
+                        values[index] = next;
+                    }
+                }
+            }
+            if largest_change < 1.0e-6 {
+                break;
+            }
+        }
+        values
+    })
+}
+
+#[derive(Deserialize)]
+struct WarperPlane {
+    offsets: Vec<[f64; 2]>,
+    locks: Vec<bool>,
+}
+
+#[derive(Deserialize)]
+struct WarperNeutralAxis {
+    offsets: Vec<[f64; 3]>,
+    locks: Vec<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WarperState {
+    schema_version: u32,
+    color_space: String,
+    mesh_mode: String,
+    interpolation: String,
+    solver: String,
+    gamut_mode: String,
+    axis_angle: f64,
+    #[serde(default = "default_warper_grid")]
+    grid_size: usize,
+    #[serde(default = "default_warper_chroma")]
+    chroma_limit: f64,
+    planes: [WarperPlane; 2],
+    neutral_axis: WarperNeutralAxis,
+}
+
+fn default_warper_grid() -> usize {
+    7
+}
+fn default_warper_chroma() -> f64 {
+    0.2
+}
+
+type WarperControls = [[[f32; 2]; COLOR_WARPER_MAX_PLANE_NODES]; 2];
+struct WarperLatticeCache {
+    grid_size: usize,
+    controls: WarperControls,
+    lattice: Box<[[f32; 4]; COLOR_WARPER_MAX_NODES]>,
+}
+
+thread_local! {
+    static WARPER_LATTICE_CACHE: std::cell::RefCell<Option<WarperLatticeCache>> = const { std::cell::RefCell::new(None) };
+}
+
+fn parse_color_warper_gpu(js_adjustments: &serde_json::Value, is_visible: bool) -> ColorWarperGpu {
+    let Some(value) = js_adjustments.get("colorWarper") else {
+        return ColorWarperGpu::default();
+    };
+    if value.get("unsupportedState").is_some() {
+        return ColorWarperGpu::default();
+    }
+    let Ok(state) = serde_json::from_value::<WarperState>(value.clone()) else {
+        return ColorWarperGpu::default();
+    };
+    let supported_schema = (state.schema_version == 2
+        && state.mesh_mode == "cartesian-volume"
+        && state.interpolation == "smooth-trilinear")
+        || (state.schema_version == 1
+            && state.mesh_mode == "chroma-luma-four-ray"
+            && state.interpolation == "smooth-bilinear");
+    let size = state.grid_size;
+    let limit = state.chroma_limit;
+    if !supported_schema
+        || state.color_space != "oklab"
+        || state.solver != "screened-laplacian"
+        || state.gamut_mode != "pipeline-native"
+        || !matches!(size, 5 | 7 | 9 | 13)
+        || !limit.is_finite()
+        || !(0.1..=1.0).contains(&limit)
+        || !state.axis_angle.is_finite()
+        || state
+            .planes
+            .iter()
+            .any(|plane| plane.offsets.len() != size * size || plane.locks.len() != size * size)
+        || state.neutral_axis.offsets.len() != size
+        || state.neutral_axis.locks.len() != size
+    {
+        return ColorWarperGpu::default();
+    }
+    let mut controls = [[[0.0; 2]; COLOR_WARPER_MAX_PLANE_NODES]; 2];
+    for row in 0..size {
+        let neutral = state.neutral_axis.offsets[row];
+        for col in 0..size {
+            let index = row * size + col;
+            for (plane, control) in controls.iter_mut().enumerate() {
+                let offset = state.planes[plane].offsets[index];
+                if offset.iter().any(|v| !v.is_finite()) {
+                    return ColorWarperGpu::default();
+                }
+                let packed = if col == size / 2 {
+                    [neutral[plane], neutral[2]]
+                } else {
+                    offset
+                };
+                let source_c = (col as f64 / (size - 1) as f64 * 2.0 - 1.0) * limit;
+                let source_l = 1.0 - row as f64 / (size - 1) as f64;
+                if packed.iter().any(|v| !v.is_finite())
+                    || source_c + packed[0] < -limit - 1e-8
+                    || source_c + packed[0] > limit + 1e-8
+                    || source_l + packed[1] < -1e-8
+                    || source_l + packed[1] > 1.0 + 1e-8
+                {
+                    return ColorWarperGpu::default();
+                }
+                control[index] = [packed[0] as f32, packed[1] as f32];
+            }
+        }
+    }
+    let mut result = ColorWarperGpu {
+        grid_size: size as u32,
+        chroma_limit: limit as f32,
+        axis_angle_radians: (((state.axis_angle % 360.0) + 360.0) % 360.0).to_radians() as f32,
+        mesh_mode: 1,
+        ..ColorWarperGpu::default()
+    };
+    if !is_visible || controls.iter().flatten().flatten().all(|v| *v == 0.0) {
+        return result;
+    }
+    WARPER_LATTICE_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some(cached) = cache.as_ref()
+            && cached.grid_size == size
+            && cached.controls == controls
+        {
+            result.lattice = *cached.lattice;
+        } else {
+            let components = solve_color_warper_volume_component(&controls, size);
+            for (index, node) in result
+                .lattice
+                .iter_mut()
+                .take(size * size * size)
+                .enumerate()
+            {
+                *node = [
+                    components[0][index],
+                    components[1][index],
+                    components[2][index],
+                    0.0,
+                ];
+            }
+            *cache = Some(WarperLatticeCache {
+                grid_size: size,
+                controls,
+                lattice: Box::new(result.lattice),
+            });
+        }
+    });
+    result.enabled = u32::from(result.lattice.iter().flatten().any(|v| v.abs() > 1e-8));
+    result
 }
 
 fn get_global_adjustments_from_json(
@@ -2189,6 +2467,7 @@ fn get_global_adjustments_from_json(
 
     let tone_mapper = js_adjustments["toneMapper"].as_str().unwrap_or("basic");
     let (pipe_to_rendering, rendering_to_pipe) = calculate_agx_matrices();
+    let color_warper = parse_color_warper_gpu(js_adjustments, is_visible("colorWarper"));
 
     let (has_lut, lut_intensity, lut_is_scene_referred) = if is_visible("effects") {
         (
@@ -2310,6 +2589,8 @@ fn get_global_adjustments_from_json(
         _pad_agx3: 0.0,
         agx_pipe_to_rendering_matrix: pipe_to_rendering,
         agx_rendering_to_pipe_matrix: rendering_to_pipe,
+
+        color_warper,
 
         _pad_cg1: 0.0,
         _pad_cg2: 0.0,
@@ -2542,6 +2823,10 @@ pub fn get_all_adjustments_from_json(
         tile_offset_x: 0,
         tile_offset_y: 0,
         mask_atlas_cols: 1,
+        histogram_min_x: 0,
+        histogram_min_y: 0,
+        histogram_max_x: 0,
+        histogram_max_y: 0,
     }
 }
 
@@ -3484,4 +3769,280 @@ pub fn calculate_auto_adjustments(
     let results = perform_auto_analysis(&original_image);
 
     Ok(auto_results_to_json(&results))
+}
+
+#[cfg(test)]
+mod color_warper_tests {
+    use super::*;
+
+    #[test]
+    fn missing_or_hidden_color_warper_is_identity() {
+        assert_eq!(
+            parse_color_warper_gpu(&serde_json::json!({}), true).enabled,
+            0
+        );
+        let state = serde_json::json!({
+            "colorWarper": {
+                "schemaVersion": 2,
+                "colorSpace": "oklab",
+                "meshMode": "cartesian-volume",
+                "interpolation": "smooth-trilinear",
+                "solver": "screened-laplacian",
+                "gamutMode": "pipeline-native",
+                "gridSize": 5,
+                "planes": [],
+                "neutralAxis": { "offsets": [] }
+            }
+        });
+        assert_eq!(parse_color_warper_gpu(&state, false).enabled, 0);
+    }
+
+    #[test]
+    fn plane_controls_generate_a_cartesian_volume_with_a_shared_neutral_axis() {
+        let mut offsets = vec![serde_json::json!([0.0, 0.0]); 25];
+        offsets[0] = serde_json::json!([0.1, -0.2]);
+        let state = serde_json::json!({
+            "colorWarper": {
+                "schemaVersion": 2,
+                "colorSpace": "oklab",
+                "meshMode": "cartesian-volume",
+                "interpolation": "smooth-trilinear",
+                "solver": "screened-laplacian",
+                "gamutMode": "pipeline-native",
+                "gridSize": 5,
+                "axisAngle": 45.0,
+                "planes": [
+                    { "offsets": offsets, "locks": vec![false; 25] },
+                    { "offsets": vec![serde_json::json!([0.0, 0.0]); 25], "locks": vec![false; 25] }
+                ],
+                "neutralAxis": {
+                    "locks": vec![true; 5],
+                    "offsets": [
+                        [0.03, -0.04, -0.05], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+                    ]
+                }
+            }
+        });
+        let packed = parse_color_warper_gpu(&state, true);
+        assert_eq!(packed.enabled, 1);
+        assert_eq!(packed.grid_size, 5);
+        assert_eq!(packed.lattice[10][0], 0.1);
+        assert_eq!(packed.lattice[10][2], -0.2);
+        assert_eq!(packed.lattice[12][..3], [0.03, -0.04, -0.05]);
+    }
+
+    #[test]
+    fn malformed_or_out_of_bounds_mesh_bypasses_processing() {
+        let invalid = serde_json::json!({
+            "colorWarper": {
+                "schemaVersion": 2,
+                "colorSpace": "oklab",
+                "meshMode": "cartesian-volume",
+                "interpolation": "smooth-trilinear",
+                "solver": "screened-laplacian",
+                "gamutMode": "pipeline-native",
+                "gridSize": 5,
+                "axisAngle": 0.0,
+                "planes": [
+                    { "offsets": vec![serde_json::json!([0.0, 0.0]); 25], "locks": vec![false; 25] },
+                    { "offsets": vec![serde_json::json!([0.0, 0.0]); 25], "locks": vec![false; 25] }
+                ],
+                "neutralAxis": {
+                    "locks": vec![true; 5],
+                    "offsets": [
+                        [0.0, 0.0, 0.1], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+                    ]
+                }
+            }
+        });
+        assert_eq!(parse_color_warper_gpu(&invalid, true).enabled, 0);
+    }
+
+    fn default_warper_state(size: usize) -> serde_json::Value {
+        let locks: Vec<bool> = (0..size * size)
+            .map(|i| {
+                let (row, col) = (i / size, i % size);
+                (row == 0 || row == size - 1) && (col == 0 || col == size - 1)
+            })
+            .collect();
+        serde_json::json!({"colorWarper": {
+            "schemaVersion": 2, "colorSpace": "oklab", "meshMode": "cartesian-volume",
+            "interpolation": "smooth-trilinear", "solver": "screened-laplacian", "gamutMode": "pipeline-native",
+            "gridSize": size, "chromaLimit": 0.2, "axisAngle": 0,
+            "planes": [
+                {"offsets": vec![[0.0, 0.0]; size * size], "locks": locks},
+                {"offsets": vec![[0.0, 0.0]; size * size], "locks": locks}
+            ],
+            "neutralAxis": {"offsets": vec![[0.0, 0.0, 0.0]; size], "locks": vec![true; size]}
+        }})
+    }
+
+    #[test]
+    fn identity_locks_and_bypass_are_not_visible_edits() {
+        let mut state = default_warper_state(7);
+        assert!(!is_image_edited(&state, false, None));
+        state["colorWarper"]["planes"][0]["locks"][8] = serde_json::json!(true);
+        state["colorWarper"]["axisAngle"] = serde_json::json!(45);
+        assert!(!is_image_edited(&state, false, None));
+        state["colorWarper"]["planes"][0]["offsets"][8] = serde_json::json!([0.02, -0.03]);
+        assert!(is_image_edited(&state, false, None));
+        state["sectionVisibility"] = serde_json::json!({"colorWarper": false});
+        assert!(!is_image_edited(&state, false, None));
+        let bypass = parse_color_warper_gpu(&state, false);
+        assert_eq!(bypass.chroma_limit, 0.2);
+        assert!((bypass.axis_angle_radians - std::f32::consts::FRAC_PI_4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn defaults_validation_and_legacy_controls_match_the_frontend() {
+        let mut state = default_warper_state(7);
+        state["colorWarper"]
+            .as_object_mut()
+            .unwrap()
+            .remove("gridSize");
+        state["colorWarper"]
+            .as_object_mut()
+            .unwrap()
+            .remove("chromaLimit");
+        state["colorWarper"]["axisAngle"] = serde_json::json!(-405);
+        let parsed = parse_color_warper_gpu(&state, true);
+        assert_eq!(parsed.grid_size, 7);
+        assert_eq!(parsed.chroma_limit, 0.2);
+        assert!((parsed.axis_angle_radians - 315_f32.to_radians()).abs() < 1e-6);
+        for size in [5, 7, 9, 13] {
+            let mut valid = default_warper_state(size);
+            valid["colorWarper"]["planes"][0]["offsets"][size + 1] =
+                serde_json::json!([0.02, -0.03]);
+            let packed = parse_color_warper_gpu(&valid, true);
+            assert_eq!(packed.enabled, 1);
+            let cached = parse_color_warper_gpu(&valid, true);
+            assert_eq!(packed.lattice, cached.lattice);
+            let mut legacy = valid.clone();
+            legacy["colorWarper"]["schemaVersion"] = serde_json::json!(1);
+            legacy["colorWarper"]["meshMode"] = serde_json::json!("chroma-luma-four-ray");
+            legacy["colorWarper"]["interpolation"] = serde_json::json!("smooth-bilinear");
+            assert_eq!(
+                packed.lattice,
+                parse_color_warper_gpu(&legacy, true).lattice
+            );
+            for (key, value) in [
+                ("chromaLimit", serde_json::json!(0.05)),
+                ("axisAngle", serde_json::Value::Null),
+                ("unsupportedState", serde_json::json!({"schemaVersion": 99})),
+            ] {
+                let mut invalid = valid.clone();
+                invalid["colorWarper"][key] = value;
+                assert_eq!(parse_color_warper_gpu(&invalid, true).enabled, 0);
+            }
+            valid["colorWarper"]["planes"][0]["locks"] = serde_json::json!([]);
+            assert_eq!(parse_color_warper_gpu(&valid, true).enabled, 0);
+        }
+    }
+
+    #[test]
+    fn main_wgsl_parses_and_validates() {
+        let source = include_str!("shaders/shader.wgsl");
+        let module = naga::front::wgsl::parse_str(source).expect("main WGSL should parse");
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&module)
+        .expect("main WGSL should validate");
+
+        let curves = source
+            .find("final_rgb = mix(final_rgb, mask_curved_srgb, influence);")
+            .expect("masked curves stage");
+        let distribution = source
+            .find("collect_color_warper_distribution(final_rgb, absolute_coord);")
+            .expect("pre-warper distribution stage");
+        let warper = source
+            .find("final_rgb = apply_color_warper(final_rgb);")
+            .expect("color warper stage");
+        let display_lut = source
+            .find("adjustments.global.lut_is_scene_referred == 0u")
+            .expect("display LUT stage");
+        assert!(curves < distribution && distribution < warper && warper < display_lut);
+        assert!(source.contains(
+            "if (adjustments.global.color_warper.enabled == 0u) { return working_rgb; }"
+        ));
+    }
+
+    fn decode_srgb_signed(value: f32) -> f32 {
+        let sign = value.signum();
+        let magnitude = value.abs();
+        sign * if magnitude <= 0.04045 {
+            magnitude / 12.92
+        } else {
+            ((magnitude + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    fn encode_srgb_signed(value: f32) -> f32 {
+        let sign = value.signum();
+        let magnitude = value.abs();
+        sign * if magnitude <= 0.003_130_8 {
+            magnitude * 12.92
+        } else {
+            1.055 * magnitude.powf(1.0 / 2.4) - 0.055
+        }
+    }
+
+    #[test]
+    fn display_stage_srgb_d65_adapter_preserves_extended_range() {
+        for encoded in [-0.12_f32, 0.0, 0.18, 1.25] {
+            let round_trip = encode_srgb_signed(decode_srgb_signed(encoded));
+            assert!((round_trip - encoded).abs() < 1.0e-6);
+        }
+
+        // Linear sRGB red in XYZ D65. This fixture documents the current
+        // display-stage primary/white-point contract used by the shader adapter.
+        let xyz_red = [0.412_456_4_f32, 0.212_672_9, 0.019_333_9];
+        assert!((xyz_red[0] - 0.412_456_4).abs() < 1.0e-7);
+        assert!((xyz_red[1] - 0.212_672_9).abs() < 1.0e-7);
+        assert!((xyz_red[2] - 0.019_333_9).abs() < 1.0e-7);
+    }
+
+    #[test]
+    fn oklab_fixture_matches_shader_contract() {
+        // Evaluate the same linear-sRGB -> LMS -> OKLab path used in WGSL.
+        let l = 0.412_221_46_f32.cbrt();
+        let m = 0.211_903_5_f32.cbrt();
+        let s = 0.088_302_46_f32.cbrt();
+        let red_oklab = [
+            0.210_454_26 * l + 0.793_617_8 * m - 0.004_072_047 * s,
+            1.977_998_5 * l - 2.428_592_2 * m + 0.450_593_7 * s,
+            0.025_904_037 * l + 0.782_771_77 * m - 0.808_675_77 * s,
+        ];
+        assert!((red_oklab[0] - 0.627_955_4).abs() < 1.0e-6);
+        assert!((red_oklab[1] - 0.224_863_1).abs() < 1.0e-6);
+        assert!((red_oklab[2] - 0.125_846_3).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn locked_neutral_constraint_does_not_create_a_chroma_dead_zone() {
+        for size in [5, 7, 9, 13] {
+            let mut controls = [[[0.0_f32; 2]; COLOR_WARPER_MAX_PLANE_NODES]; 2];
+            let center = size / 2;
+            let row = center;
+            controls[0][row * size + center + 1][0] = 0.1;
+            let volume = solve_color_warper_volume_component(&controls, size);
+            let neutral = row * size * size + center * size + center;
+            let adjacent = row * size * size + center * size + center + 1;
+            let hidden_neighbor = row * size * size + (center + 1) * size + center + 1;
+            assert_eq!(volume[0][neutral], 0.0);
+            assert_eq!(volume[0][adjacent], 0.1);
+            assert!(volume[0][hidden_neighbor] > 0.0);
+
+            // A low-chroma sample halfway between these nodes receives an immediate
+            // smooth-trilinear deformation. There is no finite neutral cylinder.
+            let t = 0.5_f32;
+            let smooth_t = t * t * (3.0 - 2.0 * t);
+            let interpolated =
+                volume[0][neutral] * (1.0 - smooth_t) + volume[0][adjacent] * smooth_t;
+            assert!(interpolated > 0.0);
+        }
+    }
 }

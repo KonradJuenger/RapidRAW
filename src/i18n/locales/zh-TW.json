@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "白平衡選取器：請在設定中停用 WGPU。",
       "whiteBalance": "白平衡"
     },
+    "colorWarper": {
+      "axisAngle": "軸角",
+      "colorSpace": "色彩空間",
+      "densityHint": "變更網格密度會重新取樣目前的變形。",
+      "grid": "網格",
+      "help": "拖曳節點；Ctrl/Cmd 可追加選取，Shift/Alt 可微調。Tab 切換焦點，空白鍵選取，方向鍵移動。兩個平面共用中性軸明度。下方按鈕可重設節點、平面或全部設定。",
+      "lock": "鎖定選取的節點",
+      "nodeLabel": "節點：第 {{row}} 列，第 {{column}} 欄",
+      "planeA": "平面 A · 彩度 → / 明度 ↑",
+      "planeB": "平面 B · 彩度 → / 明度 ↑",
+      "range": "範圍",
+      "rangeHint": "網格和預覽的最大彩度範圍。",
+      "resetAll": "全部重設",
+      "resetPlane": "重設使用中的平面",
+      "resetSelected": "重設選取的節點",
+      "unlock": "解除鎖定選取的節點",
+      "unsupported": "此 Color Warper 狀態使用不支援的版本或色彩空間。請重設後再編輯。"
+    },
     "curves": {
       "channelTitle": "{{channel}} 通道",
       "channels": {
@@ -303,6 +321,7 @@
       "sections": {
         "basic": "基礎",
         "color": "顏色",
+        "colorWarper": "色彩變形器",
         "curves": "曲線",
         "details": "細節",
         "effects": "效果"

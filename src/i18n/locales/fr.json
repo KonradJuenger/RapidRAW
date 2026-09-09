@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "Pipette BB : Désactivez WGPU dans les paramètres.",
       "whiteBalance": "Balance des blancs"
     },
+    "colorWarper": {
+      "axisAngle": "Angle de l'axe",
+      "colorSpace": "Espace colorimétrique",
+      "densityHint": "Modifier la densité de la grille rééchantillonne la déformation actuelle.",
+      "grid": "Grille",
+      "help": "Faites glisser les nœuds ; Ctrl/Cmd étend la sélection. Maj/Alt affine le réglage. Tab déplace le focus, Espace sélectionne et les flèches déplacent les nœuds. Les plans partagent la clarté de l’axe neutre. Les boutons réinitialisent les nœuds, un plan ou tout.",
+      "lock": "Verrouiller les nœuds sélectionnés",
+      "nodeLabel": "Nœud : ligne {{row}}, colonne {{column}}",
+      "planeA": "Plan A · chroma → / clarté ↑",
+      "planeB": "Plan B · chroma → / clarté ↑",
+      "range": "Plage",
+      "rangeHint": "Étendue maximale de chroma pour la grille et l’aperçu.",
+      "resetAll": "Tout réinitialiser",
+      "resetPlane": "Réinitialiser le plan actif",
+      "resetSelected": "Réinitialiser les nœuds sélectionnés",
+      "unlock": "Déverrouiller les nœuds sélectionnés",
+      "unsupported": "Cet état du déformateur de couleurs utilise une version ou un espace colorimétrique non pris en charge. Réinitialisez-le pour le modifier."
+    },
     "curves": {
       "channelTitle": "Canal {{channel}}",
       "channels": {
@@ -319,6 +337,7 @@
       "sections": {
         "basic": "Basique",
         "color": "Couleur",
+        "colorWarper": "Déformateur de couleurs",
         "curves": "Courbes",
         "details": "Détails",
         "effects": "Effets"

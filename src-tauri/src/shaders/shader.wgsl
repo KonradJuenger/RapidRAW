@@ -30,6 +30,18 @@ struct ColorCalibrationSettings {
     _pad1: f32,
 }
 
+struct ColorWarperGpu {
+    enabled: u32,
+    grid_size: u32,
+    color_space: u32,
+    mesh_mode: u32,
+    axis_angle_radians: f32,
+    chroma_limit: f32,
+    _pad0: f32,
+    collect_distribution: f32,
+    lattice: array<vec4<f32>, 2197>,
+}
+
 struct GlobalAdjustments {
     exposure: f32,
     brightness: f32,
@@ -81,6 +93,8 @@ struct GlobalAdjustments {
     _pad_agx3: f32,
     agx_pipe_to_rendering_matrix: mat3x3<f32>,
     agx_rendering_to_pipe_matrix: mat3x3<f32>,
+
+    color_warper: ColorWarperGpu,
 
     _pad_cg1: f32,
     _pad_cg2: f32,
@@ -176,6 +190,14 @@ struct AllAdjustments {
     tile_offset_x: u32,
     tile_offset_y: u32,
     mask_atlas_cols: u32,
+    histogram_min_x: u32,
+    histogram_min_y: u32,
+    histogram_max_x: u32,
+    histogram_max_y: u32,
+}
+
+struct ColorWarperHistogram {
+    bins: array<atomic<u32>, 65536>,
 }
 
 struct HslRange {
@@ -210,6 +232,7 @@ const HSL_RANGES: array<HslRange, 8> = array<HslRange, 8>(
 
 @group(0) @binding(10) var flare_texture: texture_2d<f32>;
 @group(0) @binding(11) var flare_sampler: sampler;
+@group(0) @binding(12) var<storage, read_write> color_warper_histogram: ColorWarperHistogram;
 
 const LUMA_COEFF = vec3<f32>(0.2126, 0.7152, 0.0722);
 
@@ -241,6 +264,154 @@ fn linear_to_srgb_extended(c: vec3<f32>) -> vec3<f32> {
     let higher = (1.0 + a) * pow(safe_c, vec3<f32>(1.0 / 2.4)) - a;
     let lower = safe_c * 12.92;
     return select(higher, lower, safe_c <= cutoff);
+}
+
+fn linear_to_srgb_signed(c: vec3<f32>) -> vec3<f32> {
+    let magnitude = abs(c);
+    let lower = magnitude * 12.92;
+    let higher = 1.055 * pow(magnitude, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return sign(c) * select(higher, lower, magnitude <= vec3<f32>(0.0031308));
+}
+
+fn srgb_to_linear_signed(c: vec3<f32>) -> vec3<f32> {
+    let magnitude = abs(c);
+    let lower = magnitude / 12.92;
+    let higher = pow((magnitude + 0.055) / 1.055, vec3<f32>(2.4));
+    return sign(c) * select(higher, lower, magnitude <= vec3<f32>(0.04045));
+}
+
+// The post-curve RapidRAW display-stage contract is sRGB code values with
+// sRGB/D65 primaries. Keep that adapter separate from the OKLab transform.
+fn rapidraw_working_to_xyz_d65(c: vec3<f32>) -> vec3<f32> {
+    let linear = srgb_to_linear_signed(c);
+    return mat3x3<f32>(
+        0.4124564, 0.2126729, 0.0193339,
+        0.3575761, 0.7151522, 0.1191920,
+        0.1804375, 0.0721750, 0.9503041
+    ) * linear;
+}
+
+fn xyz_d65_to_rapidraw_working(xyz: vec3<f32>) -> vec3<f32> {
+    let linear = mat3x3<f32>(
+         3.2404542, -0.9692660,  0.0556434,
+        -1.5371385,  1.8760108, -0.2040259,
+        -0.4985314,  0.0415560,  1.0572252
+    ) * xyz;
+    return linear_to_srgb_signed(linear);
+}
+
+fn xyz_d65_to_oklab(xyz: vec3<f32>) -> vec3<f32> {
+    // XYZ D65 -> linear sRGB -> OKLab. This remains behind the color-space
+    // boundary so another Cartesian opponent space can replace it later.
+    let linear = mat3x3<f32>(
+         3.2404542, -0.9692660,  0.0556434,
+        -1.5371385,  1.8760108, -0.2040259,
+        -0.4985314,  0.0415560,  1.0572252
+    ) * xyz;
+    let lms = mat3x3<f32>(
+        0.4122214708, 0.2119034982, 0.0883024619,
+        0.5363325363, 0.6806995451, 0.2817188376,
+        0.0514459929, 0.1073969566, 0.6299787005
+    ) * linear;
+    let lms_root = sign(lms) * pow(abs(lms), vec3<f32>(1.0 / 3.0));
+    return mat3x3<f32>(
+        0.2104542553,  1.9779984951,  0.0259040371,
+        0.7936177850, -2.4285922050,  0.7827717662,
+       -0.0040720468,  0.4505937099, -0.8086757660
+    ) * lms_root;
+}
+
+fn oklab_to_xyz_d65(lab: vec3<f32>) -> vec3<f32> {
+    let lms_root = mat3x3<f32>(
+        1.0, 1.0, 1.0,
+        0.3963377774, -0.1055613458, -0.0894841775,
+        0.2158037573, -0.0638541728, -1.2914855480
+    ) * lab;
+    let lms = lms_root * lms_root * lms_root;
+    let linear = mat3x3<f32>(
+         4.0767416621, -1.2684380046, -0.0041960863,
+        -3.3077115913,  2.6097574011, -0.7034186147,
+         0.2309699292, -0.3413193965,  1.7076147010
+    ) * lms;
+    return mat3x3<f32>(
+        0.4124564, 0.2126729, 0.0193339,
+        0.3575761, 0.7151522, 0.1191920,
+        0.1804375, 0.0721750, 0.9503041
+    ) * linear;
+}
+
+fn color_warper_node(p: u32, q: u32, lightness_row: u32, size: u32) -> vec3<f32> {
+    return adjustments.global.color_warper.lattice[lightness_row * size * size + q * size + p].xyz;
+}
+
+fn sample_color_warper_lattice(p: f32, q: f32, lightness: f32) -> vec3<f32> {
+    let size = adjustments.global.color_warper.grid_size;
+    let size_f = f32(size - 1u);
+    let chroma_limit = adjustments.global.color_warper.chroma_limit;
+    let gx = clamp((p / chroma_limit + 1.0) * 0.5 * size_f, 0.0, size_f);
+    let gy = clamp((q / chroma_limit + 1.0) * 0.5 * size_f, 0.0, size_f);
+    let gz = clamp((1.0 - lightness) * size_f, 0.0, size_f);
+    let x0 = u32(floor(gx));
+    let y0 = u32(floor(gy));
+    let z0 = u32(floor(gz));
+    let x1 = min(size - 1u, x0 + 1u);
+    let y1 = min(size - 1u, y0 + 1u);
+    let z1 = min(size - 1u, z0 + 1u);
+    let tx0 = gx - f32(x0);
+    let ty0 = gy - f32(y0);
+    let tz0 = gz - f32(z0);
+    let tx = tx0 * tx0 * (3.0 - 2.0 * tx0);
+    let ty = ty0 * ty0 * (3.0 - 2.0 * ty0);
+    let tz = tz0 * tz0 * (3.0 - 2.0 * tz0);
+    let z0y0 = mix(color_warper_node(x0, y0, z0, size), color_warper_node(x1, y0, z0, size), tx);
+    let z0y1 = mix(color_warper_node(x0, y1, z0, size), color_warper_node(x1, y1, z0, size), tx);
+    let z1y0 = mix(color_warper_node(x0, y0, z1, size), color_warper_node(x1, y0, z1, size), tx);
+    let z1y1 = mix(color_warper_node(x0, y1, z1, size), color_warper_node(x1, y1, z1, size), tx);
+    return mix(mix(z0y0, z0y1, ty), mix(z1y0, z1y1, ty), tz);
+}
+
+fn add_color_warper_distribution(plane: u32, opponent_coordinate: f32, lightness: f32) {
+    let x = u32(round(clamp(
+        (opponent_coordinate / adjustments.global.color_warper.chroma_limit + 1.0) * 0.5 * 255.0,
+        0.0,
+        255.0
+    )));
+    let y = u32(round(clamp((1.0 - lightness) * 127.0, 0.0, 127.0)));
+    let bin = plane * 32768u + y * 256u + x;
+    atomicAdd(&color_warper_histogram.bins[bin], 1024u);
+}
+
+fn collect_color_warper_distribution(working_rgb: vec3<f32>, absolute_coord: vec2<u32>) {
+    if (adjustments.global.color_warper.collect_distribution < 0.5) { return; }
+    if (absolute_coord.x < adjustments.histogram_min_x || absolute_coord.y < adjustments.histogram_min_y ||
+        absolute_coord.x >= adjustments.histogram_max_x || absolute_coord.y >= adjustments.histogram_max_y) { return; }
+    if (((absolute_coord.x + absolute_coord.y) & 1u) != 0u) { return; }
+
+    let lab = xyz_d65_to_oklab(rapidraw_working_to_xyz_d65(working_rgb));
+    if (!all(lab == lab) || any(abs(lab) > vec3<f32>(1.0e20))) { return; }
+    let angle = adjustments.global.color_warper.axis_angle_radians;
+    let u = vec2<f32>(cos(angle), sin(angle));
+    let v = vec2<f32>(-u.y, u.x);
+    let chroma_vector = lab.yz;
+    add_color_warper_distribution(0u, dot(chroma_vector, u), lab.x);
+    add_color_warper_distribution(1u, dot(chroma_vector, v), lab.x);
+}
+
+fn apply_color_warper(working_rgb: vec3<f32>) -> vec3<f32> {
+    if (adjustments.global.color_warper.enabled == 0u) { return working_rgb; }
+
+    let original_lab = xyz_d65_to_oklab(rapidraw_working_to_xyz_d65(working_rgb));
+    let angle = adjustments.global.color_warper.axis_angle_radians;
+    let u = vec2<f32>(cos(angle), sin(angle));
+    let v = vec2<f32>(-u.y, u.x);
+    let p = dot(original_lab.yz, u);
+    let q = dot(original_lab.yz, v);
+    let delta = sample_color_warper_lattice(p, q, original_lab.x);
+    let warped_chroma = u * (p + delta.x) + v * (q + delta.y);
+    let warped_lab = vec3<f32>(original_lab.x + delta.z, warped_chroma);
+    let warped_rgb = xyz_d65_to_rapidraw_working(oklab_to_xyz_d65(warped_lab));
+    if (!all(warped_rgb == warped_rgb) || any(abs(warped_rgb) > vec3<f32>(1.0e20))) { return working_rgb; }
+    return warped_rgb;
 }
 
 fn linear_to_vlog(c: vec3<f32>) -> vec3<f32> {
@@ -1870,6 +2041,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             final_rgb = mix(final_rgb, mask_curved_srgb, influence);
         }
     }
+
+    collect_color_warper_distribution(final_rgb, absolute_coord);
+    final_rgb = apply_color_warper(final_rgb);
 
     if (adjustments.global.has_lut == 1u && adjustments.global.lut_is_scene_referred == 0u) {
         let lut_color = sample_lut_tetrahedral(final_rgb);

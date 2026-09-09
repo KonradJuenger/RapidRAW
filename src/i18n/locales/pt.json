@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "Seletor de BB: Desative o WGPU nas Configurações.",
       "whiteBalance": "Balanço de Branco"
     },
+    "colorWarper": {
+      "axisAngle": "Ângulo do eixo",
+      "colorSpace": "Espaço de cor",
+      "densityHint": "Alterar a densidade da grelha volta a amostrar a deformação atual.",
+      "grid": "Grelha",
+      "help": "Arraste os nós; Ctrl/Cmd amplia a seleção. Shift/Alt permite ajustes finos. Tab foca, Espaço seleciona e as setas movem os nós. Os planos partilham a luminosidade do eixo neutro. Os botões repõem nós, um plano ou tudo.",
+      "lock": "Bloquear nós selecionados",
+      "nodeLabel": "Nó: linha {{row}}, coluna {{column}}",
+      "planeA": "Plano A · croma → / luminosidade ↑",
+      "planeB": "Plano B · croma → / luminosidade ↑",
+      "range": "Intervalo",
+      "rangeHint": "Amplitude máxima de croma para a grelha e a pré-visualização.",
+      "resetAll": "Repor tudo",
+      "resetPlane": "Repor plano ativo",
+      "resetSelected": "Repor nós selecionados",
+      "unlock": "Desbloquear nós selecionados",
+      "unsupported": "Este estado do deformador de cores utiliza uma versão ou um espaço de cor não suportado. Reponha-o para o editar."
+    },
     "curves": {
       "channelTitle": "Canal {{channel}}",
       "channels": {
@@ -319,6 +337,7 @@
       "sections": {
         "basic": "Básico",
         "color": "Cor",
+        "colorWarper": "Deformador de cores",
         "curves": "Curvas",
         "details": "Detalhes",
         "effects": "Efeitos"

@@ -576,6 +576,10 @@ fn build_single_mask_adjustments(all: &AllAdjustments, mask_index: usize) -> All
         tile_offset_x: all.tile_offset_x,
         tile_offset_y: all.tile_offset_y,
         mask_atlas_cols: all.mask_atlas_cols,
+        histogram_min_x: all.histogram_min_x,
+        histogram_min_y: all.histogram_min_y,
+        histogram_max_x: all.histogram_max_x,
+        histogram_max_y: all.histogram_max_y,
     };
     single.mask_adjustments[0] = all.mask_adjustments[mask_index];
     for i in 1..single.mask_adjustments.len() {

@@ -547,6 +547,7 @@ Explore example edits processed entirely within RapidRAW. You can download the `
         <li><strong>Tonal Controls:</strong> Exposure, Tone Mapping (including AgX!), Contrast, Highlights, Shadows, Whites, and Blacks.</li>
         <li><strong>Tone Curves:</strong> Full control over Luma/RGB and parametric curves.</li>
         <li><strong>Color Grading:</strong> Temperature, Tint, Vibrance, Saturation, color wheels, and a full HSL color mixer.</li>
+        <li><strong>Color Warper:</strong> Reshape chroma and lightness with two linked Oklab grids. <a href="docs/color-warper.md">Controls and saved-state details</a>.</li>
         <li><strong>Detail Enhancement:</strong> Sharpening, Clarity, Structure, and Noise Reduction (Luma & Color).</li>
         <li><strong>Creative Effects:</strong> Lens Blur (Bokeh), LUTs, Dehaze, Vignette, Glow, Halation, Flares, and Film Grain.</li>
         <li><strong>Transform Tools:</strong> Perspective correction, rotation, straightening, crop, and warping tools.</li>

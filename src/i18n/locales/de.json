@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "WA-Pipette: WGPU in den Einstellungen deaktivieren.",
       "whiteBalance": "Weißabgleich"
     },
+    "colorWarper": {
+      "axisAngle": "Achsenwinkel",
+      "colorSpace": "Farbraum",
+      "densityHint": "Eine Änderung der Gitterdichte tastet die aktuelle Verformung neu ab.",
+      "grid": "Gitter",
+      "help": "Knoten ziehen; Strg/Cmd erweitert die Auswahl. Umschalt/Alt ermöglicht Feineinstellungen. Tab fokussiert Knoten, Leertaste wählt aus, Pfeiltasten verschieben. Beide Ebenen teilen die Helligkeit der Neutralachse. Die Schaltflächen unten setzen Knoten, eine Ebene oder alles zurück.",
+      "lock": "Ausgewählte Knoten sperren",
+      "nodeLabel": "Knoten: Zeile {{row}}, Spalte {{column}}",
+      "planeA": "Ebene A · Chroma → / Helligkeit ↑",
+      "planeB": "Ebene B · Chroma → / Helligkeit ↑",
+      "range": "Bereich",
+      "rangeHint": "Maximaler Chromabereich für Gitter und Vorschau.",
+      "resetAll": "Alles zurücksetzen",
+      "resetPlane": "Aktive Ebene zurücksetzen",
+      "resetSelected": "Ausgewählte Knoten zurücksetzen",
+      "unlock": "Ausgewählte Knoten entsperren",
+      "unsupported": "Dieser Color-Warper-Zustand verwendet eine nicht unterstützte Version oder einen nicht unterstützten Farbraum. Setze ihn zum Bearbeiten zurück."
+    },
     "curves": {
       "channelTitle": "{{channel}}-Kanal",
       "channels": {
@@ -303,6 +321,7 @@
       "sections": {
         "basic": "Basis",
         "color": "Farbe",
+        "colorWarper": "Color-Warper",
         "curves": "Kurven",
         "details": "Details",
         "effects": "Effekte"

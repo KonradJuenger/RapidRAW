@@ -3,9 +3,20 @@ import { listen } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { Status } from '../components/ui/ExportImportProperties';
 import { useProcessStore } from '../store/useProcessStore';
-import { useEditorStore } from '../store/useEditorStore';
+import { ColorWarperDistribution, useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
 import { useLibraryStore } from '../store/useLibraryStore';
+import { colorWarperDistributionRequests } from '../utils/colorWarperDistribution';
+import type { ChannelConfig } from '../components/adjustments/Curves';
+import type { WaveformData } from '../components/ui/AppProperties';
+
+interface AnalyticsUpdate {
+  path: string;
+  histogram?: ChannelConfig | null;
+  waveform?: WaveformData | null;
+  colorWarperDistribution?: ColorWarperDistribution | null;
+  colorWarperRequestId?: string | null;
+}
 
 interface TauriListenerProps {
   refreshAllFolderTrees: () => void;
@@ -78,11 +89,23 @@ export function useTauriListeners({
       listen('preview-update-uncropped', (event: any) => {
         if (isEffectActive) useEditorStore.getState().setEditor({ uncroppedAdjustedPreviewUrl: event.payload });
       }),
-      listen('analytics-update', (event: any) => {
+      listen<AnalyticsUpdate>('analytics-update', (event) => {
         if (isEffectActive && event.payload.path === useEditorStore.getState().selectedImage?.path) {
-          const update: { histogram?: any; waveform?: any } = {};
+          const update: {
+            histogram?: ChannelConfig;
+            waveform?: WaveformData;
+            colorWarperDistribution?: ColorWarperDistribution;
+          } = {};
           if (event.payload.histogram != null) update.histogram = event.payload.histogram;
           if (event.payload.waveform != null) update.waveform = event.payload.waveform;
+          const { colorWarperRequestId, colorWarperDistribution } = event.payload;
+          if (
+            colorWarperRequestId &&
+            colorWarperDistributionRequests.complete(colorWarperRequestId, colorWarperDistribution != null) &&
+            colorWarperDistribution
+          ) {
+            update.colorWarperDistribution = colorWarperDistribution;
+          }
           useEditorStore.getState().setEditor(update);
         }
       }),

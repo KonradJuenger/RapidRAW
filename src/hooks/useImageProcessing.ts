@@ -10,6 +10,7 @@ import { Adjustments, COPYABLE_ADJUSTMENT_KEYS } from '../utils/adjustments';
 import { Invokes, Panel } from '../components/ui/AppProperties';
 import { debouncedSave } from './useEditorActions';
 import { globalImageCache } from '../utils/ImageLRUCache';
+import { colorWarperDistributionRequests, getColorWarperDistributionSignature } from '../utils/colorWarperDistribution';
 
 export function useImageProcessing(
   transformWrapperRef: any,
@@ -35,6 +36,7 @@ export function useImageProcessing(
 
   const activeView = useUIStore((state) => state.activeView);
   const activePanel = useUIStore((state) => state.activePanel);
+  const isColorWarperOpen = useUIStore((state) => state.collapsibleSectionsState.colorWarper);
   const appSettings = useSettingsStore((state) => state.appSettings);
   const multiSelectedPaths = useLibraryStore((state) => state.multiSelectedPaths);
 
@@ -51,7 +53,9 @@ export function useImageProcessing(
   const selectedImagePathRef = useRef<string | null>(null);
   useEffect(() => {
     selectedImagePathRef.current = selectedImage?.path ?? null;
-  }, [selectedImage?.path]);
+    colorWarperDistributionRequests.reset();
+    setEditor({ colorWarperDistribution: null });
+  }, [selectedImage?.path, setEditor]);
 
   const calculateROI = useCallback(() => {
     if (!transformWrapperRef.current) return null;
@@ -173,6 +177,12 @@ export function useImageProcessing(
 
       const jobId = ++previewJobIdRef.current;
       const roi = calculateROI();
+      const colorWarperRequestId =
+        isColorWarperOpen && !dragging
+          ? colorWarperDistributionRequests.begin(
+              getColorWarperDistributionSignature(currentPath, currentAdjustments, targetRes),
+            )
+          : null;
 
       try {
         const buffer: ArrayBuffer = await invoke(Invokes.ApplyAdjustments, {
@@ -181,6 +191,7 @@ export function useImageProcessing(
           targetResolution: targetRes || null,
           roi: roi || null,
           requestAnalytics: shouldRequestAnalytics,
+          colorWarperRequestId,
           computeWaveform: !!isWaveformVisible,
           activeWaveformChannel: activeWaveformChannelRef.current || null,
         });
@@ -260,6 +271,7 @@ export function useImageProcessing(
           }
         }
       } catch (err) {
+        if (colorWarperRequestId) colorWarperDistributionRequests.complete(colorWarperRequestId, false);
         if (err !== 'Superseded or worker failed') {
           console.error('Failed to apply adjustments:', err);
         }
@@ -271,8 +283,35 @@ export function useImageProcessing(
         }
       }
     },
-    [selectedImage?.path, calculateROI, isWaveformVisible, setEditor, previewJobIdRef, latestRenderedJobIdRef],
+    [
+      selectedImage?.path,
+      calculateROI,
+      isWaveformVisible,
+      isColorWarperOpen,
+      setEditor,
+      previewJobIdRef,
+      latestRenderedJobIdRef,
+    ],
   );
+
+  useEffect(() => {
+    if (!isColorWarperOpen) {
+      colorWarperDistributionRequests.reset();
+      return;
+    }
+    const timer = setInterval(() => {
+      const editor = useEditorStore.getState();
+      if (
+        !editor.selectedImage?.isReady ||
+        editor.isSliderDragging ||
+        useUIStore.getState().activeView !== 'editor' ||
+        !colorWarperDistributionRequests.needsRetry()
+      )
+        return;
+      void executeApplyAdjustments(editor.previewOverride ?? editor.adjustments, false, currentResRef.current);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isColorWarperOpen, executeApplyAdjustments, currentResRef]);
 
   const flushPipeline = useCallback(() => {
     if (inFlightCountRef.current >= 3) return;
@@ -494,6 +533,7 @@ export function useImageProcessing(
     appSettings?.copyPasteSettings?.includedAdjustments,
     appSettings?.copyPasteSettings?.autoSync,
     isWaveformVisible,
+    isColorWarperOpen,
   ]);
 
   return {

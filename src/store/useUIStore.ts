@@ -13,6 +13,7 @@ export type SwitcherPlacement = 'bottom' | 'right' | 'left' | 'top';
 interface CollapsibleSectionsState {
   basic: boolean;
   color: boolean;
+  colorWarper: boolean;
   curves: boolean;
   details: boolean;
   effects: boolean;
@@ -320,7 +321,14 @@ export const useUIStore = create<UIState>((set, get) => ({
   activePanel: Panel.Adjustments,
   renderedPanel: Panel.Adjustments,
   slideDirection: 1,
-  collapsibleSectionsState: { basic: true, color: false, curves: true, details: false, effects: false },
+  collapsibleSectionsState: {
+    basic: true,
+    curves: true,
+    colorWarper: false,
+    color: false,
+    details: false,
+    effects: false,
+  },
   cropSectionsState: { transform: false, lens: false },
 
   isCreateFolderModalOpen: false,

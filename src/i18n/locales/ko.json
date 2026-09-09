@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "WB 피커: 설정에서 WGPU를 비활성화하세요.",
       "whiteBalance": "화이트 밸런스"
     },
+    "colorWarper": {
+      "axisAngle": "축 각도",
+      "colorSpace": "색 공간",
+      "densityHint": "그리드 밀도를 변경하면 현재 변형이 다시 샘플링됩니다.",
+      "grid": "그리드",
+      "help": "노드를 드래그하세요. Ctrl/Cmd로 추가 선택하고 Shift/Alt로 미세 조정합니다. Tab으로 초점을 이동하고 스페이스로 선택하며 화살표 키로 이동합니다. 두 평면은 무채색 축의 명도를 공유합니다. 아래 버튼으로 노드, 평면 또는 전체를 재설정합니다.",
+      "lock": "선택한 노드 잠금",
+      "nodeLabel": "노드: {{row}}행, {{column}}열",
+      "planeA": "평면 A · 크로마 → / 명도 ↑",
+      "planeB": "평면 B · 크로마 → / 명도 ↑",
+      "range": "범위",
+      "rangeHint": "그리드와 미리보기의 최대 크로마 범위입니다.",
+      "resetAll": "모두 재설정",
+      "resetPlane": "활성 평면 재설정",
+      "resetSelected": "선택한 노드 재설정",
+      "unlock": "선택한 노드 잠금 해제",
+      "unsupported": "이 Color Warper 상태는 지원되지 않는 버전 또는 색 공간을 사용합니다. 편집하려면 재설정하세요."
+    },
     "curves": {
       "channelTitle": "{{channel}} 채널",
       "channels": {
@@ -303,6 +321,7 @@
       "sections": {
         "basic": "기본",
         "color": "색상",
+        "colorWarper": "색상 변형기",
         "curves": "커브",
         "details": "디테일",
         "effects": "효과"

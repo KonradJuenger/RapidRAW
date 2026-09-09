@@ -335,6 +335,7 @@ fn process_preview_job(
     target_resolution: Option<u32>,
     roi: Option<(f32, f32, f32, f32)>,
     request_analytics: bool,
+    color_warper_request_id: Option<String>,
     compute_waveform: bool,
     active_waveform_channel: Option<&str>,
 ) -> Result<Vec<u8>, String> {
@@ -493,11 +494,17 @@ fn process_preview_job(
 
     let is_raw = loaded_image.is_raw;
     let tm_override = resolve_tonemapper_override_from_handle(app_handle, is_raw);
-    let final_adjustments = get_all_adjustments_from_json(&adjustments_clone, is_raw, tm_override);
+    let mut final_adjustments =
+        get_all_adjustments_from_json(&adjustments_clone, is_raw, tm_override);
+    // Distribution is sampled at the exact pre-warper shader location. Keep it
+    // disabled for interactive previews so dragging the mesh leaves the plot stable.
+    final_adjustments.global.color_warper.collect_distribution =
+        u32::from(color_warper_request_id.is_some() && !is_interactive) as f32;
     let lut_path = adjustments_clone["lutPath"].as_str();
     let lut = lut_path.and_then(|p| lut_processing::get_or_load_lut(&state, p).ok());
 
-    let wants_analytics = !(is_interactive && pixel_roi.is_some()) && request_analytics;
+    let wants_analytics = !(is_interactive && pixel_roi.is_some())
+        && (request_analytics || color_warper_request_id.is_some());
     let channel_filter = if is_interactive {
         active_waveform_channel.map(|s| s.to_string())
     } else {
@@ -511,6 +518,7 @@ fn process_preview_job(
             .unwrap()
             .clone()
             .map(|tx| crate::AnalyticsConfig {
+                color_warper_request_id,
                 path: loaded_image.path.clone(),
                 compute_waveform,
                 active_waveform_channel: channel_filter,
@@ -631,6 +639,17 @@ fn start_analytics_worker(app_handle: tauri::AppHandle) {
     std::thread::spawn(move || {
         while let Ok(mut job) = rx.recv() {
             while let Ok(latest) = rx.try_recv() {
+                // Preserve requested distributions even when newer histogram work replaces this job.
+                if let Some(request_id) = job.color_warper_request_id.take() {
+                    let _ = app_handle.emit(
+                        "analytics-update",
+                        serde_json::json!({
+                            "path": job.path,
+                            "colorWarperRequestId": request_id,
+                            "colorWarperDistribution": job.color_warper_distribution,
+                        }),
+                    );
+                }
                 job = latest;
             }
 
@@ -646,13 +665,18 @@ fn start_analytics_worker(app_handle: tauri::AppHandle) {
                 None
             };
 
-            if histogram_data.is_some() || waveform_data.is_some() {
+            if histogram_data.is_some()
+                || waveform_data.is_some()
+                || job.color_warper_request_id.is_some()
+            {
                 let _ = app_handle.emit(
                     "analytics-update",
                     serde_json::json!({
                         "path": job.path,
                         "histogram": histogram_data,
                         "waveform": waveform_data,
+                        "colorWarperDistribution": job.color_warper_distribution,
+                        "colorWarperRequestId": job.color_warper_request_id,
                     }),
                 );
             }
@@ -682,6 +706,7 @@ fn start_preview_worker(app_handle: tauri::AppHandle) {
                 job.target_resolution,
                 job.roi,
                 job.request_analytics,
+                job.color_warper_request_id,
                 job.compute_waveform,
                 job.active_waveform_channel.as_deref(),
             ) {
@@ -704,6 +729,7 @@ async fn apply_adjustments(
     target_resolution: Option<u32>,
     roi: Option<(f32, f32, f32, f32)>,
     request_analytics: bool,
+    color_warper_request_id: Option<String>,
     compute_waveform: bool,
     active_waveform_channel: Option<String>,
     state: tauri::State<'_, AppState>,
@@ -719,6 +745,7 @@ async fn apply_adjustments(
                 target_resolution,
                 roi,
                 request_analytics,
+                color_warper_request_id,
                 compute_waveform,
                 active_waveform_channel,
                 responder: tx,

@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "Próbnik BB: Wyłącz WGPU w Ustawieniach.",
       "whiteBalance": "Balans bieli"
     },
+    "colorWarper": {
+      "axisAngle": "Kąt osi",
+      "colorSpace": "Przestrzeń kolorów",
+      "densityHint": "Zmiana gęstości siatki powoduje ponowne próbkowanie bieżącego odkształcenia.",
+      "grid": "Siatka",
+      "help": "Przeciągaj węzły; Ctrl/Cmd rozszerza zaznaczenie. Shift/Alt umożliwia dokładne zmiany. Tab ustawia fokus, Spacja zaznacza, a strzałki przesuwają węzły. Płaszczyzny współdzielą jasność osi neutralnej. Przyciski resetują węzły, płaszczyznę lub wszystko.",
+      "lock": "Zablokuj wybrane węzły",
+      "nodeLabel": "Węzeł: wiersz {{row}}, kolumna {{column}}",
+      "planeA": "Płaszczyzna A · chroma → / jasność ↑",
+      "planeB": "Płaszczyzna B · chroma → / jasność ↑",
+      "range": "Zakres",
+      "rangeHint": "Maksymalny zakres chromy siatki i podglądu.",
+      "resetAll": "Resetuj wszystko",
+      "resetPlane": "Resetuj aktywną płaszczyznę",
+      "resetSelected": "Resetuj wybrane węzły",
+      "unlock": "Odblokuj wybrane węzły",
+      "unsupported": "Ten stan deformatora kolorów używa nieobsługiwanej wersji lub przestrzeni kolorów. Zresetuj go, aby go edytować."
+    },
     "curves": {
       "channelTitle": "Kanał {{channel}}",
       "channels": {
@@ -335,6 +353,7 @@
       "sections": {
         "basic": "Podstawowe",
         "color": "Kolor",
+        "colorWarper": "Deformator kolorów",
         "curves": "Krzywe",
         "details": "Detale",
         "effects": "Efekty"

@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "WB Picker: Disable WGPU in Settings.",
       "whiteBalance": "White Balance"
     },
+    "colorWarper": {
+      "axisAngle": "Axis Angle",
+      "colorSpace": "Color Space",
+      "densityHint": "Changing grid density resamples the current deformation; lowering density may lose fine detail.",
+      "grid": "Grid",
+      "help": "Drag nodes; Ctrl/Cmd adds selection. Shift/Alt makes fine adjustments. Tab focuses nodes; Space selects and arrow keys move them. Both planes share neutral-axis lightness. Reset selected nodes, a plane, or everything using the buttons below.",
+      "lock": "Lock selected nodes",
+      "nodeLabel": "Node: row {{row}}, column {{column}}",
+      "planeA": "Plane A · chroma → / lightness ↑",
+      "planeB": "Plane B · chroma → / lightness ↑",
+      "range": "Range",
+      "rangeHint": "Maximum chroma span for the grid and preview.",
+      "resetAll": "Reset All",
+      "resetPlane": "Reset active plane",
+      "resetSelected": "Reset selected nodes",
+      "unlock": "Unlock selected nodes",
+      "unsupported": "This Color Warper state uses an unsupported version or color space. Reset it to edit."
+    },
     "curves": {
       "channelTitle": "{{channel}} Channel",
       "channels": {
@@ -303,6 +321,7 @@
       "sections": {
         "basic": "Basic",
         "color": "Color",
+        "colorWarper": "Color Warper",
         "curves": "Curves",
         "details": "Details",
         "effects": "Effects"

@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "WBスポイト: 設定でWGPUを無効にしてください。",
       "whiteBalance": "ホワイトバランス"
     },
+    "colorWarper": {
+      "axisAngle": "軸角",
+      "colorSpace": "カラースペース",
+      "densityHint": "グリッド密度を変更すると、現在の変形が再サンプリングされます。",
+      "grid": "グリッド",
+      "help": "ノードをドラッグします。Ctrl/Cmdで追加選択、Shift/Altで微調整。Tabでフォーカス、スペースで選択、矢印キーで移動します。両平面で無彩色軸の明度を共有します。下のボタンでノード、平面、またはすべてをリセットできます。",
+      "lock": "選択したノードをロック",
+      "nodeLabel": "ノード：{{row}} 行、{{column}} 列",
+      "planeA": "平面 A · クロマ → / 明度 ↑",
+      "planeB": "平面 B · クロマ → / 明度 ↑",
+      "range": "範囲",
+      "rangeHint": "グリッドとプレビューの最大クロマ範囲。",
+      "resetAll": "すべてリセット",
+      "resetPlane": "アクティブな平面をリセット",
+      "resetSelected": "選択したノードをリセット",
+      "unlock": "選択したノードのロックを解除",
+      "unsupported": "このカラーワーパーの状態では、サポートされていないバージョンまたはカラースペースが使用されています。編集するにはリセットしてください。"
+    },
     "curves": {
       "channelTitle": "{{channel}} チャンネル",
       "channels": {
@@ -303,6 +321,7 @@
       "sections": {
         "basic": "基本",
         "color": "カラー",
+        "colorWarper": "カラーワーパー",
         "curves": "トーンカーブ",
         "details": "ディテール",
         "effects": "効果"

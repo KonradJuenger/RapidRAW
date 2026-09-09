@@ -1,6 +1,7 @@
 import { Crop } from 'react-image-crop';
 import { v4 as uuidv4 } from 'uuid';
 import { SubMask, SubMaskMode } from '../components/panel/right/Masks';
+import { ColorWarperState, createDefaultColorWarper, normalizeColorWarper } from './colorWarper';
 
 export enum ActiveChannel {
   Blue = 'blue',
@@ -184,6 +185,7 @@ export interface Adjustments {
   colorCalibration: ColorCalibration;
   colorGrading: ColorGradingProps;
   colorNoiseReduction: number;
+  colorWarper: ColorWarperState;
   contrast: number;
   curves: Curves;
   pointCurves?: Curves;
@@ -374,6 +376,7 @@ export interface Sections {
   [index: string]: Array<string>;
   basic: Array<string>;
   curves: Array<string>;
+  colorWarper: Array<string>;
   color: Array<string>;
   details: Array<string>;
   effects: Array<string>;
@@ -383,6 +386,7 @@ export interface SectionVisibility {
   [index: string]: boolean;
   basic: boolean;
   curves: boolean;
+  colorWarper: boolean;
   color: boolean;
   details: boolean;
   effects: boolean;
@@ -488,6 +492,7 @@ export const INITIAL_MASK_ADJUSTMENTS: MaskAdjustments = {
   sectionVisibility: {
     basic: true,
     curves: true,
+    colorWarper: true,
     color: true,
     details: true,
     effects: true,
@@ -523,6 +528,7 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   colorCalibration: { ...INITIAL_COLOR_CALIBRATION },
   colorGrading: { ...INITIAL_COLOR_GRADING },
   colorNoiseReduction: 0,
+  colorWarper: createDefaultColorWarper(),
   contrast: 0,
   crop: null,
   curves: getDefaultCurves(),
@@ -585,6 +591,7 @@ export const INITIAL_ADJUSTMENTS: Adjustments = {
   sectionVisibility: {
     basic: true,
     curves: true,
+    colorWarper: true,
     color: true,
     details: true,
     effects: true,
@@ -746,6 +753,7 @@ export const normalizeLoadedAdjustments = (loadedAdjustments: Adjustments): any 
     transformXOffset: loadedAdjustments.transformXOffset ?? INITIAL_ADJUSTMENTS.transformXOffset,
     transformYOffset: loadedAdjustments.transformYOffset ?? INITIAL_ADJUSTMENTS.transformYOffset,
     colorCalibration: { ...INITIAL_ADJUSTMENTS.colorCalibration, ...(loadedAdjustments.colorCalibration || {}) },
+    colorWarper: normalizeColorWarper(loadedAdjustments.colorWarper),
     colorGrading: { ...INITIAL_ADJUSTMENTS.colorGrading, ...(loadedAdjustments.colorGrading || {}) },
     hsl: { ...INITIAL_ADJUSTMENTS.hsl, ...(loadedAdjustments.hsl || {}) },
     curves: loadedAdjustments.curves ? deepCloneCurves(loadedAdjustments.curves) : getDefaultCurves(),
@@ -791,6 +799,7 @@ export const ADJUSTMENT_GROUPS: Record<string, AdjustmentGroup[]> = {
       keys: ['curves', 'pointCurves', 'parametricCurve', 'curveMode'],
     },
   ],
+  colorWarper: [{ label: 'editor.adjustments.sections.colorWarper', keys: ['colorWarper'] }],
   color: [
     { label: 'modals.copyPaste.groups.whiteBalance', keys: [ColorAdjustment.Temperature, ColorAdjustment.Tint] },
     { label: 'modals.copyPaste.groups.presence', keys: [ColorAdjustment.Saturation, ColorAdjustment.Vibrance] },
@@ -904,6 +913,7 @@ export const ADJUSTMENT_SECTIONS: Sections = {
     'toneMapper',
   ],
   curves: ['curves', 'pointCurves', 'parametricCurve', 'curveMode'],
+  colorWarper: ['colorWarper'],
   color: [
     ColorAdjustment.Saturation,
     ColorAdjustment.Temperature,

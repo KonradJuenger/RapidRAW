@@ -21,6 +21,12 @@ interface BaseRenderSize extends ImageDimensions {
   offsetY: number;
 }
 
+export interface ColorWarperDistribution {
+  width: number;
+  height: number;
+  planes: [number[], number[]];
+}
+
 interface EditorState {
   // Core Image & Adjustments
   selectedImage: SelectedImage | null;
@@ -40,6 +46,7 @@ interface EditorState {
   // Analytics
   histogram: ChannelConfig | null;
   waveform: WaveformData | null;
+  colorWarperDistribution: ColorWarperDistribution | null;
   isWaveformVisible: boolean;
   activeWaveformChannel: string;
   waveformHeight: number;
@@ -100,6 +107,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   showOriginal: false,
   histogram: null,
   waveform: null,
+  colorWarperDistribution: null,
   isWaveformVisible: false,
   activeWaveformChannel: 'luma',
   waveformHeight: 220,

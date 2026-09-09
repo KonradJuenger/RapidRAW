@@ -546,6 +546,7 @@ pub struct GpuProcessor {
     main_bgl: wgpu::BindGroupLayout,
     main_pipeline: wgpu::ComputePipeline,
     adjustments_buffer: wgpu::Buffer,
+    color_warper_histogram_buffer: wgpu::Buffer,
     dummy_blur_view: wgpu::TextureView,
     dummy_lut_view: wgpu::TextureView,
     dummy_lut_sampler: wgpu::Sampler,
@@ -564,6 +565,11 @@ pub struct GpuProcessor {
 }
 
 const FLARE_MAP_SIZE: u32 = 512;
+const COLOR_WARPER_HISTOGRAM_WIDTH: usize = 256;
+const COLOR_WARPER_HISTOGRAM_HEIGHT: usize = 128;
+const COLOR_WARPER_HISTOGRAM_BINS: usize =
+    2 * COLOR_WARPER_HISTOGRAM_WIDTH * COLOR_WARPER_HISTOGRAM_HEIGHT;
+type GpuRunOutput = (Vec<u8>, u32, u32, u32, u32, Option<wgpu::Buffer>);
 
 impl GpuProcessor {
     pub fn new(context: GpuContext, max_width: u32, max_height: u32) -> Result<Self, String> {
@@ -909,6 +915,16 @@ impl GpuProcessor {
             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
             count: None,
         });
+        bind_group_layout_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 11 + MAX_MASK_BINDINGS,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        });
 
         let main_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Main BGL"),
@@ -934,6 +950,14 @@ impl GpuProcessor {
             label: Some("Adjustments Buffer"),
             size: std::mem::size_of::<AllAdjustments>() as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let color_warper_histogram_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Color Warper Histogram"),
+            size: (COLOR_WARPER_HISTOGRAM_BINS * std::mem::size_of::<u32>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -1080,6 +1104,7 @@ impl GpuProcessor {
             main_bgl,
             main_pipeline,
             adjustments_buffer,
+            color_warper_histogram_buffer,
             dummy_blur_view,
             dummy_lut_view,
             dummy_lut_sampler,
@@ -1105,7 +1130,7 @@ impl GpuProcessor {
         request: RenderRequest,
         skip_cpu_readback: bool,
         output_to_display: bool,
-    ) -> Result<(Vec<u8>, u32, u32, u32, u32), String> {
+    ) -> Result<GpuRunOutput, String> {
         let device = &self.context.device;
         let queue = &self.context.queue;
         let scale = (width.min(height) as f32) / 1080.0;
@@ -1201,6 +1226,15 @@ impl GpuProcessor {
         };
 
         let adjustments = request.adjustments;
+        let collect_color_warper_distribution =
+            adjustments.global.color_warper.collect_distribution >= 0.5;
+        if collect_color_warper_distribution {
+            queue.write_buffer(
+                &self.color_warper_histogram_buffer,
+                0,
+                bytemuck::cast_slice(&vec![0u32; COLOR_WARPER_HISTOGRAM_BINS]),
+            );
+        }
         if adjustments.global.flare_amount > 0.0 {
             let mut encoder = device.create_command_encoder(&Default::default());
 
@@ -1433,6 +1467,10 @@ impl GpuProcessor {
                 let mut tile_adjustments = adjustments;
                 tile_adjustments.tile_offset_x = input_x_start;
                 tile_adjustments.tile_offset_y = input_y_start;
+                tile_adjustments.histogram_min_x = x_start;
+                tile_adjustments.histogram_min_y = y_start;
+                tile_adjustments.histogram_max_x = x_end;
+                tile_adjustments.histogram_max_y = y_end;
                 queue.write_buffer(
                     &self.adjustments_buffer,
                     0,
@@ -1513,6 +1551,10 @@ impl GpuProcessor {
                 bind_group_entries.push(wgpu::BindGroupEntry {
                     binding: 10 + MAX_MASK_BINDINGS,
                     resource: wgpu::BindingResource::Sampler(&self.flare_sampler),
+                });
+                bind_group_entries.push(wgpu::BindGroupEntry {
+                    binding: 11 + MAX_MASK_BINDINGS,
+                    resource: self.color_warper_histogram_buffer.as_entire_binding(),
                 });
 
                 let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1595,8 +1637,111 @@ impl GpuProcessor {
             }
         }
 
-        Ok((final_pixels, out_width, out_height, bounds.x, bounds.y))
+        let distribution = if collect_color_warper_distribution {
+            Some(stage_u32_buffer(
+                device,
+                queue,
+                &self.color_warper_histogram_buffer,
+                COLOR_WARPER_HISTOGRAM_BINS,
+            ))
+        } else {
+            None
+        };
+
+        Ok((
+            final_pixels,
+            out_width,
+            out_height,
+            bounds.x,
+            bounds.y,
+            distribution,
+        ))
     }
+}
+
+fn stage_u32_buffer(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    source: &wgpu::Buffer,
+    count: usize,
+) -> wgpu::Buffer {
+    let size = (count * std::mem::size_of::<u32>()) as u64;
+    let staging = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Color Warper Histogram Readback"),
+        size,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("Color Warper Histogram Readback Encoder"),
+    });
+    encoder.copy_buffer_to_buffer(source, 0, &staging, 0, size);
+    queue.submit(Some(encoder.finish()));
+
+    staging
+}
+
+fn read_staged_u32_buffer(
+    device: &wgpu::Device,
+    staging: wgpu::Buffer,
+    count: usize,
+) -> Result<Vec<u32>, String> {
+    let slice = staging.slice(..);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    device
+        .poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_secs(2)),
+        })
+        .map_err(|error| format!("Histogram GPU poll failed: {error:?}"))?;
+    receiver
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .map_err(|_| "Histogram GPU readback timed out".to_string())?
+        .map_err(|error| format!("Histogram GPU map failed: {error}"))?;
+    let mapped = slice.get_mapped_range();
+    let result = bytemuck::cast_slice::<u8, u32>(&mapped).to_vec();
+    drop(mapped);
+    staging.unmap();
+    if result.len() != count {
+        return Err("Histogram GPU readback had an unexpected length".to_string());
+    }
+    Ok(result)
+}
+
+fn normalize_color_warper_distribution(
+    values: Option<Vec<u32>>,
+) -> Option<crate::ColorWarperDistribution> {
+    let values = values?;
+    if values.len() != COLOR_WARPER_HISTOGRAM_BINS {
+        return None;
+    }
+    let plane_size = COLOR_WARPER_HISTOGRAM_WIDTH * COLOR_WARPER_HISTOGRAM_HEIGHT;
+    let mut planes = [vec![0.0f32; plane_size], vec![0.0f32; plane_size]];
+    for plane in 0..2 {
+        let source = &values[plane * plane_size..(plane + 1) * plane_size];
+        let mut nonzero: Vec<f32> = source
+            .iter()
+            .filter(|&&value| value > 0)
+            .map(|&value| (value as f32).ln_1p())
+            .collect();
+        nonzero.sort_by(|a, b| a.total_cmp(b));
+        let ceiling = nonzero
+            .get(((nonzero.len().saturating_sub(1)) as f32 * 0.99).round() as usize)
+            .copied()
+            .unwrap_or(1.0)
+            .max(1.0e-6);
+        for (target, &value) in planes[plane].iter_mut().zip(source.iter()) {
+            *target = ((value as f32).ln_1p() / ceiling).clamp(0.0, 1.0);
+        }
+    }
+    Some(crate::ColorWarperDistribution {
+        width: COLOR_WARPER_HISTOGRAM_WIDTH as u32,
+        height: COLOR_WARPER_HISTOGRAM_HEIGHT as u32,
+        planes,
+    })
 }
 
 pub fn process_and_get_dynamic_image(
@@ -1782,14 +1927,15 @@ fn process_and_get_dynamic_image_inner(
 
     let skip_readback = output_to_display;
 
-    let (processed_pixels, out_w, out_h, out_x, out_y) = processor.run(
-        &cache.texture_view,
-        cache.width,
-        cache.height,
-        request,
-        skip_readback,
-        output_to_display,
-    )?;
+    let (processed_pixels, out_w, out_h, out_x, out_y, color_warper_histogram_readback) = processor
+        .run(
+            &cache.texture_view,
+            cache.width,
+            cache.height,
+            request,
+            skip_readback,
+            output_to_display,
+        )?;
 
     let mut final_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Final Passes Encoder"),
@@ -1887,6 +2033,7 @@ fn process_and_get_dynamic_image_inner(
             let unpadded_bytes_per_row: u32 = async_unpadded_bpr;
             let device_clone = context.device.clone();
 
+            let histogram_readback = color_warper_histogram_readback;
             std::thread::spawn(move || {
                 let buffer_slice = output_buffer.slice(..);
                 let (tx, rx) = std::sync::mpsc::channel::<Result<(), wgpu::BufferAsyncError>>();
@@ -1921,28 +2068,56 @@ fn process_and_get_dynamic_image_inner(
                     if let Some(img_buf) =
                         ImageBuffer::<Rgba<u8>, _>::from_raw(out_w, out_h, unpadded_data)
                     {
+                        let distribution = histogram_readback
+                            .and_then(|staging| {
+                                read_staged_u32_buffer(
+                                    &device_clone,
+                                    staging,
+                                    COLOR_WARPER_HISTOGRAM_BINS,
+                                )
+                                .map_err(|error| log::warn!("Color warper distribution: {error}"))
+                                .ok()
+                            })
+                            .and_then(|values| normalize_color_warper_distribution(Some(values)));
                         let dynamic_img = DynamicImage::ImageRgba8(img_buf);
                         let _ = analytics.sender.send(crate::AnalyticsJob {
+                            color_warper_request_id: analytics.color_warper_request_id,
                             path: analytics.path,
                             image: std::sync::Arc::new(dynamic_img),
                             compute_waveform: analytics.compute_waveform,
                             active_waveform_channel: analytics.active_waveform_channel,
+                            color_warper_distribution: distribution,
                         });
                     }
                 }
             });
         } else {
             let pixels_clone = processed_pixels.clone();
+            let device_clone = context.device.clone();
+            let histogram_readback = color_warper_histogram_readback;
             std::thread::spawn(move || {
                 if let Some(img_buf) =
                     ImageBuffer::<Rgba<u8>, _>::from_raw(out_w, out_h, pixels_clone)
                 {
+                    let color_warper_distribution = histogram_readback
+                        .and_then(|staging| {
+                            read_staged_u32_buffer(
+                                &device_clone,
+                                staging,
+                                COLOR_WARPER_HISTOGRAM_BINS,
+                            )
+                            .map_err(|error| log::warn!("Color warper distribution: {error}"))
+                            .ok()
+                        })
+                        .and_then(|values| normalize_color_warper_distribution(Some(values)));
                     let dynamic_img = DynamicImage::ImageRgba8(img_buf);
                     let _ = analytics.sender.send(crate::AnalyticsJob {
+                        color_warper_request_id: analytics.color_warper_request_id,
                         path: analytics.path,
                         image: std::sync::Arc::new(dynamic_img),
                         compute_waveform: analytics.compute_waveform,
                         active_waveform_channel: analytics.active_waveform_channel,
+                        color_warper_distribution,
                     });
                 }
             });

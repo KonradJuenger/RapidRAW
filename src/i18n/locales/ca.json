@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "Comptagotes BB: Desactiva WGPU a Configuració.",
       "whiteBalance": "Balanç de blancs"
     },
+    "colorWarper": {
+      "axisAngle": "Angle de l'eix",
+      "colorSpace": "Espai de color",
+      "densityHint": "Canviar la densitat de la graella torna a mostrejar la deformació actual.",
+      "grid": "Graella",
+      "help": "Arrossega els nodes; Ctrl/Cmd amplia la selecció. Maj/Alt permet ajustos fins. Tab enfoca, Espai selecciona i les fletxes mouen els nodes. Els plans comparteixen la lluminositat de l’eix neutre. Els botons restableixen nodes, un pla o tot.",
+      "lock": "Bloqueja els nodes seleccionats",
+      "nodeLabel": "Node: fila {{row}}, columna {{column}}",
+      "planeA": "Pla A · croma → / lluminositat ↑",
+      "planeB": "Pla B · croma → / lluminositat ↑",
+      "range": "Interval",
+      "rangeHint": "Extensió màxima de croma per a la graella i la previsualització.",
+      "resetAll": "Restableix-ho tot",
+      "resetPlane": "Restableix el pla actiu",
+      "resetSelected": "Restableix els nodes seleccionats",
+      "unlock": "Desbloqueja els nodes seleccionats",
+      "unsupported": "Aquest estat del deformador de color utilitza una versió o un espai de color no compatibles. Restableix-lo per editar-lo."
+    },
     "curves": {
       "channelTitle": "Canal {{channel}}",
       "channels": {
@@ -303,6 +321,7 @@
       "sections": {
         "basic": "Bàsic",
         "color": "Color",
+        "colorWarper": "Deformador de color",
         "curves": "Corbes",
         "details": "Detalls",
         "effects": "Efectes"

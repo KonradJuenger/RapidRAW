@@ -65,6 +65,24 @@
       "wbPickerWgpuDisabled": "Selettore BB: Disabilita WGPU nelle Impostazioni.",
       "whiteBalance": "Bilanciamento del Bianco"
     },
+    "colorWarper": {
+      "axisAngle": "Angolo dell'asse",
+      "colorSpace": "Spazio colore",
+      "densityHint": "La modifica della densità della griglia ricampiona la deformazione corrente.",
+      "grid": "Griglia",
+      "help": "Trascina i nodi; Ctrl/Cmd amplia la selezione. Maiusc/Alt consente regolazioni fini. Tab sposta il focus, Spazio seleziona e le frecce spostano i nodi. I piani condividono la chiarezza dell’asse neutro. I pulsanti reimpostano nodi, un piano o tutto.",
+      "lock": "Blocca i nodi selezionati",
+      "nodeLabel": "Nodo: riga {{row}}, colonna {{column}}",
+      "planeA": "Piano A · croma → / chiarezza ↑",
+      "planeB": "Piano B · croma → / chiarezza ↑",
+      "range": "Intervallo",
+      "rangeHint": "Estensione massima del croma per griglia e anteprima.",
+      "resetAll": "Reimposta tutto",
+      "resetPlane": "Reimposta il piano attivo",
+      "resetSelected": "Reimposta i nodi selezionati",
+      "unlock": "Sblocca i nodi selezionati",
+      "unsupported": "Questo stato del deformatore di colore usa una versione o uno spazio colore non supportati. Reimpostalo per modificarlo."
+    },
     "curves": {
       "channelTitle": "Canale {{channel}}",
       "channels": {
@@ -319,6 +337,7 @@
       "sections": {
         "basic": "Base",
         "color": "Colore",
+        "colorWarper": "Deformatore di colore",
         "curves": "Curve",
         "details": "Dettagli",
         "effects": "Effetti"
