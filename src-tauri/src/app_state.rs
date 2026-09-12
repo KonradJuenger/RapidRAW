@@ -89,6 +89,7 @@ pub struct ColorWarperDistribution {
     pub width: u32,
     pub height: u32,
     pub planes: [Vec<f32>; 2],
+    pub points: Vec<[f32; 3]>,
 }
 
 pub struct AnalyticsConfig {

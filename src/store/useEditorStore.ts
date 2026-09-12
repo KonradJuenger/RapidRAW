@@ -25,6 +25,8 @@ export interface ColorWarperDistribution {
   width: number;
   height: number;
   planes: [number[], number[]];
+  /** Stratified image samples in OKLab (L, a, b). */
+  points?: [number, number, number][];
 }
 
 interface EditorState {

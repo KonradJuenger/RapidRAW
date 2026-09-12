@@ -91,3 +91,16 @@ describe('Color Warper distribution requests', () => {
     expect(requests.begin('image', 12002)).not.toBeNull();
   });
 });
+
+it('reuses real color samples when the grid alignment or slice selection changes', () => {
+  const p = state();
+  p.colorWarper.mode = 'linked';
+  const signature = getColorWarperDistributionSignature('image', p);
+  for (const change of [{ angle: 20 }, { sliceSpoke: 2 }, { spokes: 12 }]) {
+    const next = structuredClone(p);
+    Object.assign(next.colorWarper.polar!, change);
+    expect(getColorWarperDistributionSignature('image', next)).toBe(signature);
+  }
+  p.colorWarper.polar!.offsets[0] = [0.2, 0.01];
+  expect(getColorWarperDistributionSignature('image', p)).toBe(signature);
+});

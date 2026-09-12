@@ -1,3 +1,5 @@
+export { computeLinearGridInfluence } from './linearGridInfluence';
+import { createPolarWarper, normalizePolarWarper, type PolarWarperState } from './polarColorWarper';
 export const COLOR_WARPER_SCHEMA_VERSION = 2 as const;
 export const COLOR_WARPER_GRID_SIZES = [5, 7, 9, 13] as const;
 export const COLOR_WARPER_MAX_GRID_SIZE = 13;
@@ -23,6 +25,8 @@ export interface ColorWarperNeutralAxisState {
 }
 
 export interface ColorWarperState {
+  mode?: 'grid' | 'polar' | 'linked';
+  polar?: PolarWarperState;
   schemaVersion: 2;
   colorSpace: 'oklab';
   meshMode: 'cartesian-volume';
@@ -72,6 +76,8 @@ export const createDefaultColorWarper = (
   gridSize: ColorWarperGridSize = 7,
   chromaLimit: number = COLOR_WARPER_DEFAULT_CHROMA_LIMIT,
 ): ColorWarperState => ({
+  mode: 'linked',
+  polar: createPolarWarper(),
   schemaVersion: COLOR_WARPER_SCHEMA_VERSION,
   colorSpace: 'oklab',
   meshMode: 'cartesian-volume',
@@ -175,7 +181,16 @@ export const normalizeColorWarper = (raw: unknown): ColorWarperState => {
   if (!deformationInBounds || !neutralInBounds) {
     return { ...createDefaultColorWarper(), unsupportedState: raw };
   }
+  const polar = normalizePolarWarper(value.polar);
+  if (
+    (value.mode !== undefined && value.mode !== 'grid' && value.mode !== 'polar' && value.mode !== 'linked') ||
+    !polar
+  ) {
+    return { ...createDefaultColorWarper(), unsupportedState: raw };
+  }
   const normalized = createDefaultColorWarper(gridSize, chromaLimit);
+  normalized.mode = value.mode ?? 'grid';
+  normalized.polar = polar;
   if (value.unsupportedState !== undefined) normalized.unsupportedState = value.unsupportedState;
   normalized.axisAngle = ((finite(value.axisAngle) % 360) + 360) % 360;
 
@@ -205,6 +220,7 @@ export const normalizeColorWarper = (raw: unknown): ColorWarperState => {
 
 export const cloneColorWarper = (state: ColorWarperState): ColorWarperState => ({
   ...state,
+  polar: structuredClone(state.polar ?? createPolarWarper()),
   chromaLimit: state.chromaLimit ?? COLOR_WARPER_DEFAULT_CHROMA_LIMIT,
   planes: state.planes.map((plane) => ({
     offsets: plane.offsets.map(([x, y]) => [x, y] as ColorWarperOffset),
@@ -217,8 +233,14 @@ export const cloneColorWarper = (state: ColorWarperState): ColorWarperState => (
 });
 
 export const isColorWarperIdentity = (state: ColorWarperState): boolean =>
-  state.planes.every((plane) => plane.offsets.every(([x, y]) => x === 0 && y === 0)) &&
-  state.neutralAxis.offsets.every(([a, b, l]) => a === 0 && b === 0 && l === 0);
+  state.mode === 'polar' || state.mode === 'linked'
+    ? (state.polar?.offsets.every(([h, c]) => h === 0 && c === 0) ?? true) &&
+      (state.polar?.neutral?.every((v) => v === 0) ?? true) &&
+      (state.mode !== 'linked' ||
+        ((state.polar?.lightness?.every((l) => l === 0) ?? true) &&
+          (state.polar?.neutralLightness?.every((v) => v === 0) ?? true)))
+    : state.planes.every((plane) => plane.offsets.every(([x, y]) => x === 0 && y === 0)) &&
+      state.neutralAxis.offsets.every(([a, b, l]) => a === 0 && b === 0 && l === 0);
 
 export const getPlaneNode = (
   state: ColorWarperState,
@@ -279,88 +301,6 @@ export const samplePlaneOffset = (
   const top: ColorWarperOffset = [p00[0] * (1 - tx) + p10[0] * tx, p00[1] * (1 - tx) + p10[1] * tx];
   const bottom: ColorWarperOffset = [p01[0] * (1 - tx) + p11[0] * tx, p01[1] * (1 - tx) + p11[1] * tx];
   return [top[0] * (1 - ty) + bottom[0] * ty, top[1] * (1 - ty) + bottom[1] * ty];
-};
-
-export const computeLinearGridInfluence = (
-  gridSize: number,
-  selected: ReadonlySet<number>,
-  locked: ReadonlySet<number>,
-): Float32Array => {
-  const count = gridSize * gridSize;
-  const values = new Float32Array(count);
-  if (selected.size === 0) return values;
-
-  for (const sel of selected) {
-    const cs = sel % gridSize;
-    const rs = Math.floor(sel / gridSize);
-
-    for (let r = 0; r < gridSize; r += 1) {
-      let cLeft = 0;
-      for (let c = cs - 1; c >= 0; c -= 1) {
-        if (locked.has(r * gridSize + c) || locked.has(rs * gridSize + c)) {
-          cLeft = Math.max(cLeft, c);
-          break;
-        }
-      }
-      let cRight = gridSize - 1;
-      for (let c = cs + 1; c < gridSize; c += 1) {
-        if (locked.has(r * gridSize + c) || locked.has(rs * gridSize + c)) {
-          cRight = Math.min(cRight, c);
-          break;
-        }
-      }
-
-      let rTop = 0;
-      for (let tr = rs - 1; tr >= 0; tr -= 1) {
-        if (locked.has(tr * gridSize + cs)) {
-          rTop = tr;
-          break;
-        }
-      }
-      let rBottom = gridSize - 1;
-      for (let br = rs + 1; br < gridSize; br += 1) {
-        if (locked.has(br * gridSize + cs)) {
-          rBottom = br;
-          break;
-        }
-      }
-
-      for (const l of locked) {
-        const cl = l % gridSize;
-        const rl = Math.floor(l / gridSize);
-        if (cl > cs && rl < rs && r <= rl) cRight = Math.min(cRight, cl);
-        if (cl < cs && rl < rs && r <= rl) cLeft = Math.max(cLeft, cl);
-        if (cl > cs && rl > rs && r >= rl) cRight = Math.min(cRight, cl);
-        if (cl < cs && rl > rs && r >= rl) cLeft = Math.max(cLeft, cl);
-      }
-
-      let infY = 0;
-      if (r >= rTop && r <= rs) {
-        infY = rs === rTop ? 1 : (r - rTop) / (rs - rTop);
-      } else if (r >= rs && r <= rBottom) {
-        infY = rs === rBottom ? 1 : (rBottom - r) / (rBottom - rs);
-      }
-      if (infY <= 0) continue;
-
-      for (let c = 0; c < gridSize; c += 1) {
-        let infX = 0;
-        if (c >= cLeft && c <= cs) {
-          infX = cs === cLeft ? 1 : (c - cLeft) / (cs - cLeft);
-        } else if (c >= cs && c <= cRight) {
-          infX = cs === cRight ? 1 : (cRight - c) / (cRight - cs);
-        }
-        if (infX <= 0) continue;
-
-        const inf = infX * infY;
-        const index = r * gridSize + c;
-        if (inf > values[index]) values[index] = inf;
-      }
-    }
-  }
-
-  for (const l of locked) values[l] = 0;
-  for (const s of selected) values[s] = 1;
-  return values;
 };
 
 export const computeScreenedInfluence = (
@@ -495,6 +435,8 @@ export const resampleColorWarper = (
   const result = createDefaultColorWarper(gridSize, nextChromaLimit);
   if (state.unsupportedState !== undefined) result.unsupportedState = state.unsupportedState;
   result.axisAngle = state.axisAngle;
+  result.mode = state.mode;
+  result.polar = structuredClone(state.polar ?? createPolarWarper());
   for (let plane = 0; plane < 2; plane += 1) {
     for (let index = 0; index < gridSize * gridSize; index += 1) {
       const x = index % gridSize;

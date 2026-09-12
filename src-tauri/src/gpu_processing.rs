@@ -567,8 +567,9 @@ pub struct GpuProcessor {
 const FLARE_MAP_SIZE: u32 = 512;
 const COLOR_WARPER_HISTOGRAM_WIDTH: usize = 256;
 const COLOR_WARPER_HISTOGRAM_HEIGHT: usize = 128;
+const COLOR_WARPER_SAMPLE_SIDE: usize = 256;
 const COLOR_WARPER_HISTOGRAM_BINS: usize =
-    2 * COLOR_WARPER_HISTOGRAM_WIDTH * COLOR_WARPER_HISTOGRAM_HEIGHT;
+    2 * COLOR_WARPER_HISTOGRAM_WIDTH * COLOR_WARPER_HISTOGRAM_HEIGHT + COLOR_WARPER_SAMPLE_SIDE * COLOR_WARPER_SAMPLE_SIDE * 4;
 type GpuRunOutput = (Vec<u8>, u32, u32, u32, u32, Option<wgpu::Buffer>);
 
 impl GpuProcessor {
@@ -1737,11 +1738,32 @@ fn normalize_color_warper_distribution(
             *target = ((value as f32).ln_1p() / ceiling).clamp(0.0, 1.0);
         }
     }
+    let points = values[2 * plane_size..].chunks_exact(4).filter_map(|sample| {
+        if sample[3] != 1 { return None; }
+        let point = [f32::from_bits(sample[0]), f32::from_bits(sample[1]), f32::from_bits(sample[2])];
+        point.iter().all(|v| v.is_finite()).then_some(point)
+    }).collect();
     Some(crate::ColorWarperDistribution {
         width: COLOR_WARPER_HISTOGRAM_WIDTH as u32,
         height: COLOR_WARPER_HISTOGRAM_HEIGHT as u32,
         planes,
+        points,
     })
+}
+
+#[test]
+fn color_warper_distribution_preserves_real_oklab_samples() {
+    let mut words = vec![0u32; COLOR_WARPER_HISTOGRAM_BINS];
+    let offset = 2 * COLOR_WARPER_HISTOGRAM_WIDTH * COLOR_WARPER_HISTOGRAM_HEIGHT;
+    words[0] = 1024;
+    words[offset..offset + 4].copy_from_slice(&[0.53f32.to_bits(), (-0.1234f32).to_bits(), 0.0678f32.to_bits(), 1]);
+    words[offset + 4..offset + 8].copy_from_slice(&[f32::NAN.to_bits(), 0, 0, 1]);
+    let last = words.len() - 4;
+    words[last..].copy_from_slice(&[0.7f32.to_bits(), 0.1f32.to_bits(), (-0.2f32).to_bits(), 1]);
+    let result = normalize_color_warper_distribution(Some(words)).unwrap();
+    assert_eq!(result.points, vec![[0.53, -0.1234, 0.0678], [0.7, 0.1, -0.2]]);
+    assert_eq!(result.planes[0][0], 1.0);
+    assert!(normalize_color_warper_distribution(Some(vec![0; 65536])).is_none());
 }
 
 pub fn process_and_get_dynamic_image(

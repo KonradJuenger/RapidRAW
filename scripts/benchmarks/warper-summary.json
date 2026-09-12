@@ -1,0 +1,288 @@
+{
+  "full": {
+    "update": {
+      "median": 266.6,
+      "p95": 323.6
+    },
+    "frame": {
+      "median": 272,
+      "p95": 328.3
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.2
+    },
+    "sliceBackground": {
+      "median": 66.6,
+      "p95": 79.4
+    },
+    "wheelDots": {
+      "median": 183.7,
+      "p95": 247
+    },
+    "sliceDots": {
+      "median": 8.7,
+      "p95": 10.3
+    }
+  },
+  "without-dots": {
+    "update": {
+      "median": 66.3,
+      "p95": 67.6
+    },
+    "frame": {
+      "median": 68.2,
+      "p95": 69.5
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.2
+    },
+    "sliceBackground": {
+      "median": 65.1,
+      "p95": 66.2
+    },
+    "wheelDots": {
+      "median": 0,
+      "p95": 0
+    },
+    "sliceDots": {
+      "median": 0,
+      "p95": 0
+    }
+  },
+  "without-background": {
+    "update": {
+      "median": 220.8,
+      "p95": 263.6
+    },
+    "frame": {
+      "median": 247.2,
+      "p95": 277
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.3
+    },
+    "sliceBackground": {
+      "median": 0,
+      "p95": 0
+    },
+    "wheelDots": {
+      "median": 211.7,
+      "p95": 254.6
+    },
+    "sliceDots": {
+      "median": 8.3,
+      "p95": 9.3
+    }
+  },
+  "mesh-only": {
+    "update": {
+      "median": 1.3,
+      "p95": 1.9
+    },
+    "frame": {
+      "median": 4,
+      "p95": 4.2
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.2
+    },
+    "sliceBackground": {
+      "median": 0,
+      "p95": 0
+    },
+    "wheelDots": {
+      "median": 0,
+      "p95": 0
+    },
+    "sliceDots": {
+      "median": 0,
+      "p95": 0
+    }
+  },
+  "full-16k": {
+    "update": {
+      "median": 76.4,
+      "p95": 78.3
+    },
+    "frame": {
+      "median": 81.6,
+      "p95": 84.1
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.2
+    },
+    "sliceBackground": {
+      "median": 66.2,
+      "p95": 68
+    },
+    "wheelDots": {
+      "median": 6.9,
+      "p95": 7.1
+    },
+    "sliceDots": {
+      "median": 2.2,
+      "p95": 2.2
+    }
+  },
+  "dense-mesh-only": {
+    "update": {
+      "median": 3.5,
+      "p95": 4.6
+    },
+    "frame": {
+      "median": 7.5,
+      "p95": 9.1
+    },
+    "resample": {
+      "median": 0.4,
+      "p95": 0.7
+    },
+    "sliceBackground": {
+      "median": 0,
+      "p95": 0
+    },
+    "wheelDots": {
+      "median": 0,
+      "p95": 0
+    },
+    "sliceDots": {
+      "median": 0,
+      "p95": 0
+    }
+  },
+  "dots-16k": {
+    "update": {
+      "median": 10.8,
+      "p95": 12.2
+    },
+    "frame": {
+      "median": 59.5,
+      "p95": 62.1
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.3
+    },
+    "sliceBackground": {
+      "median": 0,
+      "p95": 0
+    },
+    "wheelDots": {
+      "median": 7,
+      "p95": 8
+    },
+    "sliceDots": {
+      "median": 2.2,
+      "p95": 2.7
+    }
+  },
+  "dots-32k": {
+    "update": {
+      "median": 22.8,
+      "p95": 23.7
+    },
+    "frame": {
+      "median": 120.6,
+      "p95": 123.7
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.2
+    },
+    "sliceBackground": {
+      "median": 0,
+      "p95": 0
+    },
+    "wheelDots": {
+      "median": 17.1,
+      "p95": 17.7
+    },
+    "sliceDots": {
+      "median": 4.1,
+      "p95": 4.6
+    }
+  },
+  "dots-48k": {
+    "update": {
+      "median": 36,
+      "p95": 190.9
+    },
+    "frame": {
+      "median": 188.2,
+      "p95": 205.1
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.2
+    },
+    "sliceBackground": {
+      "median": 0,
+      "p95": 0
+    },
+    "wheelDots": {
+      "median": 27.9,
+      "p95": 182.8
+    },
+    "sliceDots": {
+      "median": 6.2,
+      "p95": 6.9
+    }
+  },
+  "slice-dots-only-65k": {
+    "update": {
+      "median": 10.3,
+      "p95": 11
+    },
+    "frame": {
+      "median": 29.8,
+      "p95": 31.6
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.2
+    },
+    "sliceBackground": {
+      "median": 0,
+      "p95": 0
+    },
+    "wheelDots": {
+      "median": 0,
+      "p95": 0
+    },
+    "sliceDots": {
+      "median": 8.8,
+      "p95": 9.3
+    }
+  },
+  "without-wheel-redraw": {
+    "update": {
+      "median": 76.1,
+      "p95": 79
+    },
+    "frame": {
+      "median": 79.8,
+      "p95": 82.7
+    },
+    "resample": {
+      "median": 0.1,
+      "p95": 0.2
+    },
+    "sliceBackground": {
+      "median": 65.8,
+      "p95": 68.5
+    },
+    "wheelDots": {
+      "median": 0,
+      "p95": 0
+    },
+    "sliceDots": {
+      "median": 8.8,
+      "p95": 9.2
+    }
+  }
+}

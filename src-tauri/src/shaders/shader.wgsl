@@ -197,7 +197,7 @@ struct AllAdjustments {
 }
 
 struct ColorWarperHistogram {
-    bins: array<atomic<u32>, 65536>,
+    bins: array<atomic<u32>, 327680>,
 }
 
 struct HslRange {
@@ -371,36 +371,136 @@ fn sample_color_warper_lattice(p: f32, q: f32, lightness: f32) -> vec3<f32> {
 }
 
 fn add_color_warper_distribution(plane: u32, opponent_coordinate: f32, lightness: f32) {
-    let x = u32(round(clamp(
-        (opponent_coordinate / adjustments.global.color_warper.chroma_limit + 1.0) * 0.5 * 255.0,
-        0.0,
-        255.0
-    )));
-    let y = u32(round(clamp((1.0 - lightness) * 127.0, 0.0, 127.0)));
-    let bin = plane * 32768u + y * 256u + x;
-    atomicAdd(&color_warper_histogram.bins[bin], 1024u);
+    // Bilinear splatting avoids hard rows from the histogram's 256x128 resolution.
+    let x = clamp((opponent_coordinate / adjustments.global.color_warper.chroma_limit + 1.0) * 0.5 * 255.0, 0.0, 255.0);
+    let y = clamp((1.0 - lightness) * 127.0, 0.0, 127.0);
+    let x0 = u32(floor(x)); let y0 = u32(floor(y));
+    let tx = fract(x); let ty = fract(y);
+    for (var dy = 0u; dy < 2u; dy++) {
+        for (var dx = 0u; dx < 2u; dx++) {
+            let weight = select(1.0 - tx, tx, dx == 1u) * select(1.0 - ty, ty, dy == 1u);
+            let bin = plane * 32768u + min(y0 + dy, 127u) * 256u + min(x0 + dx, 255u);
+            atomicAdd(&color_warper_histogram.bins[bin], u32(round(1024.0 * weight)));
+        }
+    }
 }
 
 fn collect_color_warper_distribution(working_rgb: vec3<f32>, absolute_coord: vec2<u32>) {
     if (adjustments.global.color_warper.collect_distribution < 0.5) { return; }
     if (absolute_coord.x < adjustments.histogram_min_x || absolute_coord.y < adjustments.histogram_min_y ||
         absolute_coord.x >= adjustments.histogram_max_x || absolute_coord.y >= adjustments.histogram_max_y) { return; }
-    if (((absolute_coord.x + absolute_coord.y) & 1u) != 0u) { return; }
 
     let lab = xyz_d65_to_oklab(rapidraw_working_to_xyz_d65(working_rgb));
     if (!all(lab == lab) || any(abs(lab) > vec3<f32>(1.0e20))) { return; }
+    // One real image sample per spatial cell, spread over the complete visible ROI.
+    // Fixed slots avoid atomic-counter bias toward whichever workgroups finish first.
+    let extent = vec2<u32>(adjustments.histogram_max_x - adjustments.histogram_min_x, adjustments.histogram_max_y - adjustments.histogram_min_y);
+    let stride = max(vec2<u32>(1u), (extent + vec2<u32>(255u)) / vec2<u32>(256u));
+    let relative = absolute_coord - vec2<u32>(adjustments.histogram_min_x, adjustments.histogram_min_y);
+    let cell = relative / stride;
+    let cell_start = cell * stride;
+    let cell_size = min(stride, extent - cell_start);
+    // Deterministic jitter avoids regular scan-line sampling patterns.
+    let hash = (cell.x * 1664525u + cell.y * 1013904223u + 747796405u);
+    let offset = vec2<u32>(hash % cell_size.x, (hash / 65537u) % cell_size.y);
+    if (all(relative == cell_start + offset)) {
+        let sample = 65536u + (cell.y * 256u + cell.x) * 4u;
+        atomicStore(&color_warper_histogram.bins[sample], bitcast<u32>(lab.x));
+        atomicStore(&color_warper_histogram.bins[sample + 1u], bitcast<u32>(lab.y));
+        atomicStore(&color_warper_histogram.bins[sample + 2u], bitcast<u32>(lab.z));
+        atomicStore(&color_warper_histogram.bins[sample + 3u], 1u);
+    }
+    // Keep histogram subsampling separate from the real-color sample slots.
+    if (((absolute_coord.x + absolute_coord.y) & 1u) != 0u) { return; }
     let angle = adjustments.global.color_warper.axis_angle_radians;
     let u = vec2<f32>(cos(angle), sin(angle));
     let v = vec2<f32>(-u.y, u.x);
+    if (adjustments.global.color_warper.mesh_mode >= 2u) {
+        // Polar display is an a/b disk: horizontal a, vertical b.
+        add_color_warper_distribution(0u, lab.y, (lab.z / adjustments.global.color_warper.chroma_limit + 1.0) * 0.5);
+        if (adjustments.global.color_warper.mesh_mode == 3u) {
+            let selected_hue = angle + f32(adjustments.global.color_warper.color_space) / f32(adjustments.global.color_warper.grid_size) * 6.28318530718;
+            let hue_distance = abs(atan2(sin(atan2(lab.z, lab.y) - selected_hue), cos(atan2(lab.z, lab.y) - selected_hue)));
+            if (hue_distance <= 3.14159265359 / f32(adjustments.global.color_warper.grid_size)) {
+                // Full horizontal width is 0..chroma_limit in the unfolded slice.
+                add_color_warper_distribution(1u, 2.0 * length(lab.yz) - adjustments.global.color_warper.chroma_limit, lab.x);
+            }
+        }
+        return;
+    }
     let chroma_vector = lab.yz;
     add_color_warper_distribution(0u, dot(chroma_vector, u), lab.x);
     add_color_warper_distribution(1u, dot(chroma_vector, v), lab.x);
+}
+
+fn polar_warper_node(ring: u32, spoke: u32) -> vec2<f32> {
+    if (ring == 0u) { return vec2<f32>(0.0); }
+    let spokes = adjustments.global.color_warper.grid_size;
+    return adjustments.global.color_warper.lattice[(ring - 1u) * spokes + spoke % spokes].xy;
+}
+
+fn sample_polar_warper(hue: f32, chroma: f32) -> vec2<f32> {
+    let spokes = adjustments.global.color_warper.grid_size;
+    let rings = u32(adjustments.global.color_warper._pad0);
+    let x = fract((hue - adjustments.global.color_warper.axis_angle_radians) / 6.28318530718 + 2.0) * f32(spokes);
+    let y = clamp(chroma / adjustments.global.color_warper.chroma_limit * f32(rings), 0.0, f32(rings));
+    let x0 = u32(floor(x));
+    let y0 = min(rings - 1u, u32(floor(y)));
+    let tx = smoothstep(0.0, 1.0, x - f32(x0));
+    let ty = smoothstep(0.0, 1.0, y - f32(y0));
+    return mix(mix(polar_warper_node(y0, x0), polar_warper_node(y0, x0 + 1u), tx),
+        mix(polar_warper_node(y0 + 1u, x0), polar_warper_node(y0 + 1u, x0 + 1u), tx), ty);
+}
+
+fn polar_lightness_node(layer: u32, ring: u32, spoke: u32) -> f32 {
+    if (ring == 0u) { return adjustments.global.color_warper.lattice[2189u + layer].z; }
+    let spokes = adjustments.global.color_warper.grid_size;
+    let rings = u32(adjustments.global.color_warper._pad0);
+    return adjustments.global.color_warper.lattice[layer * spokes * rings + (ring - 1u) * spokes + spoke % spokes].z;
+}
+
+fn polar_lightness_plane(layer: u32, x0: u32, y0: u32, tx: f32, ty: f32) -> f32 {
+    return mix(mix(polar_lightness_node(layer, y0, x0), polar_lightness_node(layer, y0, x0 + 1u), tx),
+        mix(polar_lightness_node(layer, y0 + 1u, x0), polar_lightness_node(layer, y0 + 1u, x0 + 1u), tx), ty);
+}
+
+fn sample_polar_lightness(hue: f32, chroma: f32, lightness: f32) -> f32 {
+    let spokes = adjustments.global.color_warper.grid_size;
+    let rings = u32(adjustments.global.color_warper._pad0);
+    let x = fract((hue - adjustments.global.color_warper.axis_angle_radians) / 6.28318530718 + 2.0) * f32(spokes);
+    let y = clamp(chroma / adjustments.global.color_warper.chroma_limit * f32(rings), 0.0, f32(rings));
+    let z = clamp(lightness, 0.0, 1.0) * 6.0;
+    let x0 = u32(floor(x));
+    let y0 = min(rings - 1u, u32(floor(y)));
+    let z0 = min(5u, u32(floor(z)));
+    let tx = smoothstep(0.0, 1.0, x - f32(x0));
+    let ty = smoothstep(0.0, 1.0, y - f32(y0));
+    return mix(polar_lightness_plane(z0, x0, y0, tx, ty), polar_lightness_plane(z0 + 1u, x0, y0, tx, ty), z - f32(z0));
 }
 
 fn apply_color_warper(working_rgb: vec3<f32>) -> vec3<f32> {
     if (adjustments.global.color_warper.enabled == 0u) { return working_rgb; }
 
     let original_lab = xyz_d65_to_oklab(rapidraw_working_to_xyz_d65(working_rgb));
+    if (adjustments.global.color_warper.mesh_mode >= 2u) {
+        let chroma = length(original_lab.yz);
+
+        var hue = 0.0;
+        if (chroma > 1.0e-7) { hue = atan2(original_lab.z, original_lab.y); }
+        let offset = sample_polar_warper(hue, chroma);
+        let warped_hue = hue + offset.x;
+        let warped_chroma = max(0.0, chroma + offset.y);
+        var lightness_offset = 0.0;
+        if (adjustments.global.color_warper.mesh_mode == 3u) {
+            lightness_offset = sample_polar_lightness(hue, chroma, original_lab.x);
+        }
+        let neutral_weight = 1.0 - smoothstep(0.0, 1.0, chroma / adjustments.global.color_warper.chroma_limit * adjustments.global.color_warper._pad0);
+        let ab = warped_chroma * vec2<f32>(cos(warped_hue), sin(warped_hue)) + adjustments.global.color_warper.lattice[2196].xy * neutral_weight;
+        let warped_lab = vec3<f32>(original_lab.x + lightness_offset, ab);
+        let rgb = xyz_d65_to_rapidraw_working(oklab_to_xyz_d65(warped_lab));
+        if (!all(rgb == rgb) || any(abs(rgb) > vec3<f32>(1.0e20))) { return working_rgb; }
+        return rgb;
+    }
     let angle = adjustments.global.color_warper.axis_angle_radians;
     let u = vec2<f32>(cos(angle), sin(angle));
     let v = vec2<f32>(-u.y, u.x);

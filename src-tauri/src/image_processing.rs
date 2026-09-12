@@ -2221,6 +2221,10 @@ struct WarperNeutralAxis {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WarperState {
+    #[serde(default)]
+    mode: Option<String>,
+    #[serde(default)]
+    polar: Option<PolarWarperState>,
     schema_version: u32,
     color_space: String,
     mesh_mode: String,
@@ -2234,6 +2238,62 @@ struct WarperState {
     chroma_limit: f64,
     planes: [WarperPlane; 2],
     neutral_axis: WarperNeutralAxis,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PolarWarperState {
+    #[serde(default)]
+    neutral: [f64; 2],
+    #[serde(default)]
+    neutral_lightness: [f64; 7],
+    #[serde(default)]
+    angle: f64,
+    #[serde(default)]
+    slice_spoke: usize,
+    #[serde(default)]
+    lightness: Vec<f64>,
+    spokes: usize,
+    rings: usize,
+    chroma_limit: f64,
+    offsets: Vec<[f64; 2]>,
+}
+
+fn parse_polar_warper_gpu(polar: Option<&PolarWarperState>, is_visible: bool) -> ColorWarperGpu {
+    let mut result = ColorWarperGpu { mesh_mode: 2, grid_size: 6, _pad0: 6.0, chroma_limit: 0.3, ..ColorWarperGpu::default() };
+    let Some(p) = polar else { return result; };
+    if p.neutral.iter().any(|v| !v.is_finite()) || p.neutral[0].hypot(p.neutral[1]) > p.chroma_limit + 1e-8
+        || p.neutral_lightness.iter().enumerate().any(|(i, d)| !d.is_finite() || i as f64 / 6.0 + d < -1e-8 || i as f64 / 6.0 + d > 1.0 + 1e-8 || ((i == 0 || i == 6) && *d != 0.0))
+        || !p.angle.is_finite() || !(0.0..360.0).contains(&p.angle) || p.slice_spoke >= p.spokes
+        || !matches!(p.spokes, 6 | 8 | 12 | 16 | 24)
+        || !matches!(p.rings, 3 | 4 | 6 | 8 | 12)
+        || !p.chroma_limit.is_finite() || !(0.1..=1.0).contains(&p.chroma_limit)
+        || p.offsets.len() != p.spokes * p.rings
+        || p.offsets.iter().enumerate().any(|(i, offset)| {
+            let c = ((i / p.spokes + 1) as f64 / p.rings as f64) * p.chroma_limit;
+            offset.iter().any(|v| !v.is_finite()) || offset[0].abs() > std::f64::consts::PI + 1e-8
+                || c + offset[1] < -1e-8 || c + offset[1] > p.chroma_limit + 1e-8
+        }) { return ColorWarperGpu::default(); }
+    let count = p.spokes * p.rings;
+    if !p.lightness.is_empty() && (p.lightness.len() != count * 7 || p.lightness.iter().enumerate().any(|(i, d)| {
+        let layer = i / count;
+        let l = layer as f64 / 6.0;
+        !d.is_finite() || l + d < -1e-8 || l + d > 1.0 + 1e-8 || ((layer == 0 || layer == 6) && *d != 0.0)
+    })) { return ColorWarperGpu::default(); }
+    result.axis_angle_radians = p.angle.to_radians() as f32;
+    result.color_space = p.slice_spoke as u32; // Display-only selected source spoke.
+    result.grid_size = p.spokes as u32;
+    result._pad0 = p.rings as f32;
+    result.chroma_limit = p.chroma_limit as f32;
+    if is_visible {
+        for (node, offset) in result.lattice.iter_mut().zip(&p.offsets) {
+            *node = [offset[0] as f32, offset[1] as f32, 0.0, 0.0];
+        }
+        result.lattice[2196][0] = p.neutral[0] as f32;
+        result.lattice[2196][1] = p.neutral[1] as f32;
+        result.enabled = u32::from(p.offsets.iter().flatten().chain(p.neutral.iter()).any(|v| v.abs() > 1e-8));
+    }
+    result
 }
 
 fn default_warper_grid() -> usize {
@@ -2288,6 +2348,22 @@ fn parse_color_warper_gpu(js_adjustments: &serde_json::Value, is_visible: bool) 
         || state.neutral_axis.locks.len() != size
     {
         return ColorWarperGpu::default();
+    }
+    match state.mode.as_deref() {
+        Some("polar") => return parse_polar_warper_gpu(state.polar.as_ref(), is_visible),
+        Some("linked") => {
+            let mut result = parse_polar_warper_gpu(state.polar.as_ref(), is_visible);
+            if result.mesh_mode != 2 { return result; }
+            result.mesh_mode = 3;
+            if is_visible && let Some(p) = state.polar.as_ref() {
+                for (node, d) in result.lattice.iter_mut().zip(&p.lightness) { node[2] = *d as f32; }
+                for (layer, d) in p.neutral_lightness.iter().enumerate() { result.lattice[2189 + layer][2] = *d as f32; }
+                result.enabled |= u32::from(p.lightness.iter().chain(p.neutral_lightness.iter()).any(|d| d.abs() > 1e-8));
+            }
+            return result;
+        },
+        None | Some("grid") => {},
+        _ => return ColorWarperGpu::default(),
     }
     let mut controls = [[[0.0; 2]; COLOR_WARPER_MAX_PLANE_NODES]; 2];
     for row in 0..size {
@@ -3774,6 +3850,66 @@ pub fn calculate_auto_adjustments(
 #[cfg(test)]
 mod color_warper_tests {
     use super::*;
+
+    #[test]
+    fn linked_mode_packs_lightness_and_preserves_polar_bypass() {
+        let mut state = default_warper_state(7);
+        let mut lightness = vec![0.0; 24 * 12 * 7];
+        lightness[3 * 24 * 12] = 0.1;
+        state["colorWarper"]["mode"] = serde_json::json!("linked");
+        state["colorWarper"]["polar"] = serde_json::json!({
+            "spokes": 24, "rings": 12, "chromaLimit": 0.3,
+            "offsets": vec![[0.0, 0.0]; 24 * 12], "lightness": lightness
+        });
+        let packed = parse_color_warper_gpu(&state, true);
+        assert_eq!(packed.mesh_mode, 3);
+        assert_eq!(packed.enabled, 1);
+        assert_eq!(packed.lattice[3 * 24 * 12][2], 0.1);
+        assert_eq!(packed.lattice[0][..2], [0.0, 0.0]);
+        assert_eq!(parse_color_warper_gpu(&state, false).enabled, 0);
+        state["colorWarper"]["mode"] = serde_json::json!("polar");
+        assert_eq!(parse_color_warper_gpu(&state, true).enabled, 0);
+        state["colorWarper"]["mode"] = serde_json::json!("linked");
+        state["colorWarper"]["polar"]["lightness"][0] = serde_json::json!(0.1);
+        assert_eq!(parse_color_warper_gpu(&state, true).enabled, 0);
+    }
+
+    #[test]
+    fn neutral_color_warper_controls_pack_without_overlapping_maximum_grid() {
+        let mut state = default_warper_state(7);
+        state["colorWarper"]["mode"] = serde_json::json!("linked");
+        state["colorWarper"]["polar"] = serde_json::json!({
+            "spokes": 24, "rings": 12, "chromaLimit": 0.3,
+            "offsets": vec![[0.0, 0.0]; 288], "neutral": [0.01, -0.02],
+            "neutralLightness": [0.0, 0.0, 0.0, 0.05, 0.0, 0.0, 0.0]
+        });
+        let packed = parse_color_warper_gpu(&state, true);
+        assert_eq!(packed.enabled, 1);
+        assert_eq!(packed.lattice[2196][..2], [0.01, -0.02]);
+        assert_eq!(packed.lattice[2192][2], 0.05);
+        assert_eq!(packed.lattice[2015], [0.0; 4]);
+        assert_eq!(parse_color_warper_gpu(&state, false).enabled, 0);
+        state["colorWarper"]["polar"]["neutralLightness"][0] = serde_json::json!(0.1);
+        assert_eq!(parse_color_warper_gpu(&state, true).enabled, 0);
+    }
+
+    #[test]
+    fn polar_warper_packs_offsets_and_bypasses_invalid_or_hidden_edits() {
+        let mut p = PolarWarperState { neutral: [0.0; 2], neutral_lightness: [0.0; 7], angle: 0.0, slice_spoke: 0, spokes: 6, rings: 6, chroma_limit: 0.3, lightness: vec![], offsets: vec![[0.0; 2]; 36] };
+        assert_eq!(parse_polar_warper_gpu(Some(&p), true).enabled, 0);
+        p.offsets[0] = [0.2, 0.02];
+        let packed = parse_polar_warper_gpu(Some(&p), true);
+        assert_eq!(packed.enabled, 1);
+        assert_eq!(packed.mesh_mode, 2);
+        assert_eq!(packed.grid_size, 6);
+        assert_eq!(packed._pad0, 6.0);
+        assert_eq!(packed.lattice[0], [0.2, 0.02, 0.0, 0.0]);
+        assert_eq!(parse_polar_warper_gpu(Some(&p), false).enabled, 0);
+        p.offsets[0][1] = -1.0;
+        assert_eq!(parse_polar_warper_gpu(Some(&p), true).enabled, 0);
+        p.spokes = 0;
+        assert_eq!(parse_polar_warper_gpu(Some(&p), true).enabled, 0);
+    }
 
     #[test]
     fn missing_or_hidden_color_warper_is_identity() {

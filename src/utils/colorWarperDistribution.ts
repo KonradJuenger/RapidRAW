@@ -25,6 +25,8 @@ export const getColorWarperDistributionSignature = (
 ): string => {
   const upstream = { ...adjustments } as unknown as Record<string, unknown>;
   upstream.colorWarper = {
+    mode: adjustments.colorWarper.mode ?? 'grid',
+    polarChromaLimit: adjustments.colorWarper.polar?.chromaLimit,
     schemaVersion: adjustments.colorWarper.schemaVersion,
     colorSpace: adjustments.colorWarper.colorSpace,
     axisAngle: adjustments.colorWarper.axisAngle,

@@ -1,3 +1,4 @@
+import PolarColorWarper from './PolarColorWarper';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Lock, LockOpen, RotateCcw, Undo2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -353,7 +354,7 @@ function PlaneEditor({
   );
 }
 
-export default function ColorWarper({ adjustments, setAdjustments, onDragStateChange }: Props) {
+function GridColorWarper({ adjustments, setAdjustments, onDragStateChange }: Props) {
   const { t } = useTranslation();
   const state = adjustments.colorWarper;
   const chromaLimit = state.chromaLimit ?? COLOR_WARPER_DEFAULT_CHROMA_LIMIT;
@@ -835,6 +836,47 @@ export default function ColorWarper({ adjustments, setAdjustments, onDragStateCh
         }
         onDragStateChange={onDragStateChange}
       />
+    </div>
+  );
+}
+
+export default function ColorWarper(props: Props) {
+  const { t } = useTranslation();
+  const state = props.adjustments.colorWarper;
+  const polarCoordinates = state.mode === 'polar' || state.mode === 'linked';
+  const displayLimit = polarCoordinates ? state.polar?.chromaLimit : state.chromaLimit;
+  useLayoutEffect(() => {
+    useEditorStore.getState().setEditor({ colorWarperDistribution: null });
+  }, [polarCoordinates, displayLimit]);
+  if (state.unsupportedState !== undefined) return <GridColorWarper {...props} />;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <Text variant={TextVariants.label} color={TextColors.secondary}>
+          {t('adjustments.colorWarper.mode')}
+        </Text>
+        <Dropdown
+          className="w-full"
+          triggerClassName="bg-surface"
+          value={state.mode ?? 'grid'}
+          options={[
+            { value: 'linked', label: t('adjustments.colorWarper.linkedMode') },
+            { value: 'polar', label: t('adjustments.colorWarper.polarMode') },
+            { value: 'grid', label: t('adjustments.colorWarper.gridMode') },
+          ]}
+          onChange={(mode) =>
+            props.setAdjustments((previous) => ({
+              ...previous,
+              colorWarper: { ...previous.colorWarper, mode: mode as 'grid' | 'polar' | 'linked' },
+            }))
+          }
+        />
+      </div>
+      {state.mode === 'polar' || state.mode === 'linked' ? (
+        <PolarColorWarper {...props} />
+      ) : (
+        <GridColorWarper {...props} />
+      )}
     </div>
   );
 }
