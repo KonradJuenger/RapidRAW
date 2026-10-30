@@ -5,171 +5,227 @@ LOCALES_DIR = Path("./locales")
 
 TRANSLATIONS = {
     "ca": {
-        "export": {
-            "sections": {
-                "destination": "Destinació"
-            },
-            "destination": {
-                "customFolder": "Carpeta personalitzada",
-                "originalFolder": "Carpeta de la imatge original",
-                "subfolder": "Subcarpeta",
-                "subfolderPlaceholder": "p. ex. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Connectant…",
+                            "retry": "Tornar a intentar la connexió",
+                            "unsupported": "L'inici de sessió al núvol actualment només està disponible a l'escriptori."
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "cs": {
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Připojování…",
+                            "retry": "Opakovat připojení",
+                            "unsupported": "Přihlášení do cloudu je momentálně k dispozici pouze na počítači."
+                        }
+                    }
+                }
             }
         }
     },
     "de": {
-        "export": {
-            "sections": {
-                "destination": "Zielort"
-            },
-            "destination": {
-                "customFolder": "Benutzerdefinierter Ordner",
-                "originalFolder": "Ursprungsordner des Bildes",
-                "subfolder": "Unterordner",
-                "subfolderPlaceholder": "z. B. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Verbinden…",
+                            "retry": "Verbindung erneut versuchen",
+                            "unsupported": "Die Cloud-Anmeldung ist derzeit nur auf dem Desktop verfügbar."
+                        }
+                    }
+                }
             }
         }
     },
     "en": {
-        "export": {
-            "sections": {
-                "destination": "Destination"
-            },
-            "destination": {
-                "customFolder": "Custom folder",
-                "originalFolder": "Original image folder",
-                "subfolder": "Subfolder",
-                "subfolderPlaceholder": "e.g. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Connecting…",
+                            "retry": "Retry connection",
+                            "unsupported": "Cloud sign-in is currently only available on desktop."
+                        }
+                    }
+                }
             }
         }
     },
     "es": {
-        "export": {
-            "sections": {
-                "destination": "Destino"
-            },
-            "destination": {
-                "customFolder": "Carpeta personalizada",
-                "originalFolder": "Carpeta de la imagen original",
-                "subfolder": "Subcarpeta",
-                "subfolderPlaceholder": "p. ej. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Conectando…",
+                            "retry": "Reintentar conexión",
+                            "unsupported": "El inicio de sesión en la nube actualmente solo está disponible en escritorio."
+                        }
+                    }
+                }
             }
         }
     },
     "fr": {
-        "export": {
-            "sections": {
-                "destination": "Destination"
-            },
-            "destination": {
-                "customFolder": "Dossier personnalisé",
-                "originalFolder": "Dossier de l'image d'origine",
-                "subfolder": "Sous-dossier",
-                "subfolderPlaceholder": "ex. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Connexion…",
+                            "retry": "Réessayer la connexion",
+                            "unsupported": "La connexion au cloud n'est actuellement disponible que sur ordinateur."
+                        }
+                    }
+                }
             }
         }
     },
     "it": {
-        "export": {
-            "sections": {
-                "destination": "Destinazione"
-            },
-            "destination": {
-                "customFolder": "Cartella personalizzata",
-                "originalFolder": "Cartella dell'immagine originale",
-                "subfolder": "Sottocartella",
-                "subfolderPlaceholder": "es. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Connessione in corso…",
+                            "retry": "Riprova connessione",
+                            "unsupported": "L'accesso al cloud è attualmente disponibile solo su desktop."
+                        }
+                    }
+                }
             }
         }
     },
     "ja": {
-        "export": {
-            "sections": {
-                "destination": "保存先"
-            },
-            "destination": {
-                "customFolder": "カスタムフォルダー",
-                "originalFolder": "元の画像フォルダー",
-                "subfolder": "サブフォルダー",
-                "subfolderPlaceholder": "例：final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "接続中…",
+                            "retry": "接続を再試行",
+                            "unsupported": "クラウドへのサインインは現在、デスクトップでのみ利用可能です。"
+                        }
+                    }
+                }
             }
         }
     },
     "ko": {
-        "export": {
-            "sections": {
-                "destination": "대상"
-            },
-            "destination": {
-                "customFolder": "사용자 지정 폴더",
-                "originalFolder": "원본 이미지 폴더",
-                "subfolder": "하위 폴더",
-                "subfolderPlaceholder": "예: final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "연결 중…",
+                            "retry": "연결 재시도",
+                            "unsupported": "클라우드 로그인은 현재 데스크톱에서만 사용할 수 있습니다."
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "nl": {
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Verbinden…",
+                            "retry": "Verbinding opnieuw proberen",
+                            "unsupported": "Aanmelden bij de cloud is momenteel alleen beschikbaar op desktop."
+                        }
+                    }
+                }
             }
         }
     },
     "pl": {
-        "export": {
-            "sections": {
-                "destination": "Miejsce docelowe"
-            },
-            "destination": {
-                "customFolder": "Folder niestandardowy",
-                "originalFolder": "Folder oryginalnego obrazu",
-                "subfolder": "Podfolder",
-                "subfolderPlaceholder": "np. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Łączenie…",
+                            "retry": "Ponów próbę połączenia",
+                            "unsupported": "Logowanie w chmurze jest obecnie dostępne tylko na komputerach."
+                        }
+                    }
+                }
             }
         }
     },
     "pt": {
-        "export": {
-            "sections": {
-                "destination": "Destino"
-            },
-            "destination": {
-                "customFolder": "Pasta personalizada",
-                "originalFolder": "Pasta da imagem original",
-                "subfolder": "Subpasta",
-                "subfolderPlaceholder": "ex. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Conectando…",
+                            "retry": "Tentar conexão novamente",
+                            "unsupported": "O login na nuvem está atualmente disponível apenas no desktop."
+                        }
+                    }
+                }
             }
         }
     },
     "ru": {
-        "export": {
-            "sections": {
-                "destination": "Место назначения"
-            },
-            "destination": {
-                "customFolder": "Пользовательская папка",
-                "originalFolder": "Папка исходного изображения",
-                "subfolder": "Вложенная папка",
-                "subfolderPlaceholder": "напр. final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "Подключение…",
+                            "retry": "Повторить попытку подключения",
+                            "unsupported": "Вход в облако в настоящее время доступен только на ПК."
+                        }
+                    }
+                }
             }
         }
     },
     "zh-CN": {
-        "export": {
-            "sections": {
-                "destination": "目标位置"
-            },
-            "destination": {
-                "customFolder": "自定义文件夹",
-                "originalFolder": "原始图像文件夹",
-                "subfolder": "子文件夹",
-                "subfolderPlaceholder": "例如：final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "正在连接…",
+                            "retry": "重试连接",
+                            "unsupported": "云端登录目前仅在桌面设备上可用。"
+                        }
+                    }
+                }
             }
         }
     },
     "zh-TW": {
-        "export": {
-            "sections": {
-                "destination": "目標位置"
-            },
-            "destination": {
-                "customFolder": "自訂資料夾",
-                "originalFolder": "原始影像資料夾",
-                "subfolder": "子資料夾",
-                "subfolderPlaceholder": "例如：final, WebP"
+        "settings": {
+            "processing": {
+                "ai": {
+                    "cloud": {
+                        "statuses": {
+                            "connecting": "連線中…",
+                            "retry": "重試連線",
+                            "unsupported": "雲端登入目前僅在桌面裝置上可用。"
+                        }
+                    }
+                }
             }
         }
     }
@@ -204,10 +260,8 @@ def update_json_file(file_path: Path, trans: dict):
         print(f"Error parsing JSON in {file_path.name}. Skipping.")
         return
 
-    # 1. Merge new translations
     deep_merge(data, trans)
 
-    # 2. Sort alphabetically to maintain formatting consistency
     sorted_data = sort_dict_recursively(data)
 
     with open(file_path, "w", encoding="utf-8") as f:
@@ -221,7 +275,7 @@ def main():
         print(f"Error: Locales directory '{LOCALES_DIR}' does not exist.")
         return
 
-    print("Starting translation updates for export destination settings...")
+    print("Starting translation updates for Cloud Statuses...")
     for lang, trans in TRANSLATIONS.items():
         file_path = LOCALES_DIR / f"{lang}.json"
         update_json_file(file_path, trans)
