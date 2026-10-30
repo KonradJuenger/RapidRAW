@@ -2642,6 +2642,8 @@ struct WarperState {
     mode: Option<String>,
     #[serde(default)]
     polar: Option<PolarWarperState>,
+    #[serde(default)]
+    harmonizer: Option<HarmonizerWarperState>,
     schema_version: u32,
     color_space: String,
     mesh_mode: String,
@@ -2656,6 +2658,9 @@ struct WarperState {
     planes: [WarperPlane; 2],
     neutral_axis: WarperNeutralAxis,
 }
+
+#[derive(Deserialize)]
+struct HarmonizerWarperState { polar: PolarWarperState }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2768,6 +2773,7 @@ fn parse_color_warper_gpu(js_adjustments: &serde_json::Value, is_visible: bool) 
     }
     match state.mode.as_deref() {
         Some("polar") => return parse_polar_warper_gpu(state.polar.as_ref(), is_visible),
+        Some("harmony") => return parse_polar_warper_gpu(state.harmonizer.as_ref().map(|h| &h.polar), is_visible),
         Some("linked") => {
             let mut result = parse_polar_warper_gpu(state.polar.as_ref(), is_visible);
             if result.mesh_mode != 2 { return result; }
@@ -5115,6 +5121,22 @@ pub async fn sample_white_balance(
 #[cfg(test)]
 mod color_warper_tests {
     use super::*;
+
+    #[test]
+    fn harmony_mode_uses_its_own_polar_mesh() {
+        let mut state = default_warper_state(7);
+        let mut offsets = vec![[0.0, 0.0]; 24 * 12];
+        offsets[1] = [0.1, 0.0];
+        state["colorWarper"]["mode"] = serde_json::json!("harmony");
+        state["colorWarper"]["harmonizer"] = serde_json::json!({
+            "polar": { "spokes": 24, "rings": 12, "chromaLimit": 0.4, "offsets": offsets }
+        });
+        let packed = parse_color_warper_gpu(&state, true);
+        assert_eq!(packed.mesh_mode, 2);
+        assert_eq!(packed.enabled, 1);
+        assert_eq!(packed.lattice[1][0], 0.1);
+        assert_eq!(parse_color_warper_gpu(&state, false).enabled, 0);
+    }
 
     #[test]
     fn linked_mode_packs_lightness_and_preserves_polar_bypass() {

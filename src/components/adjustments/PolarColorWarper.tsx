@@ -163,18 +163,18 @@ export default function PolarColorWarper({ adjustments, setAdjustments, onDragSt
   useEffect(() => {
     const context = background.current?.getContext('2d');
     if (!context) return;
-    const image = context.createImageData(600, 600);
-    for (let y = 0; y < 600; y++) {
-      for (let x = 0; x < 600; x++) {
-        const a = ((x / 2 - CENTER) / RADIUS) * polar.chromaLimit;
-        const b = ((CENTER - y / 2) / RADIUS) * polar.chromaLimit;
+    const image = context.createImageData(300, 300);
+    for (let y = 0; y < 300; y++) {
+      for (let x = 0; x < 300; x++) {
+        const a = ((x - CENTER) / RADIUS) * polar.chromaLimit;
+        const b = ((CENTER - y) / RADIUS) * polar.chromaLimit;
         if (Math.hypot(a, b) > polar.chromaLimit) continue;
         const { rgb } = warperCoordinatesToGamutMappedWorkingRgb(RAPIDRAW_DISPLAY_SRGB_D65, OKLAB_COLOR_SPACE, [
           0.7,
           a,
           b,
         ]);
-        const i = (y * 600 + x) * 4;
+        const i = (y * 300 + x) * 4;
         for (let k = 0; k < 3; k++) image.data[i + k] = Math.round(Math.max(0, Math.min(1, rgb[k])) * 255);
         image.data[i + 3] = 190;
       }
@@ -427,78 +427,12 @@ export default function PolarColorWarper({ adjustments, setAdjustments, onDragSt
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-text-secondary">
-        {t(linked ? 'adjustments.colorWarper.linkedHelp' : 'adjustments.colorWarper.polarHelp')}
-      </p>
-      <div className="grid grid-cols-3 gap-2">
-        {(
-          [
-            ['spokes', polar.spokes, POLAR_SPOKES],
-            ['rings', polar.rings, POLAR_RINGS],
-            ['range', polar.chromaLimit, COLOR_WARPER_CHROMA_LIMITS],
-          ] as const
-        ).map(([key, value, options]) => (
-          <div key={key} className="flex min-w-0 flex-col gap-1">
-            <span className="text-xs text-text-secondary">{t(`adjustments.colorWarper.${key}`)}</span>
-            <Dropdown
-              className="w-full"
-              triggerClassName="bg-surface"
-              value={value}
-              options={options.map((v) => ({ value: v, label: String(v) }))}
-              onChange={(v) => {
-                setSelected(null);
-                setSelectedSlice(null);
-                setWheelSelection(new Set());
-                setSliceSelection(new Set());
-                update((p) =>
-                  resamplePolarWarper(
-                    p,
-                    key === 'spokes' ? Number(v) : p.spokes,
-                    key === 'rings' ? Number(v) : p.rings,
-                    key === 'range' ? Number(v) : p.chromaLimit,
-                  ),
-                );
-              }}
-            />
-          </div>
-        ))}
-      </div>
-      <div
-        className="text-xs"
-        onBlur={() => {
-          angleSliderRef.current = null;
-        }}
-      >
-        <Slider
-          label={t('adjustments.colorWarper.gridAngle')}
-          min={0}
-          max={359.9}
-          step={0.1}
-          defaultValue={0}
-          suffix="°"
-          value={polar.angle ?? 0}
-          onDragStateChange={(dragging) => {
-            if (!dragging) angleSliderRef.current = null;
-            onDragStateChange?.(dragging);
-          }}
-          onChange={(event) => {
-            angleSliderRef.current ??= structuredClone(polar);
-            const base = angleSliderRef.current;
-            update(() =>
-              resamplePolarWarper(base, base.spokes, base.rings, base.chromaLimit, Number(event.target.value)),
-            );
-          }}
-          onPointerUp={() => {
-            angleSliderRef.current = null;
-          }}
-        />
-      </div>
       <div className="flex flex-col gap-1">
         <div className="relative aspect-square overflow-hidden rounded-md border border-border-color bg-bg-primary">
           <canvas
             ref={background}
-            width={600}
-            height={600}
+            width={300}
+            height={300}
             aria-hidden="true"
             className="absolute inset-0 h-full w-full"
           />
@@ -819,15 +753,15 @@ export default function PolarColorWarper({ adjustments, setAdjustments, onDragSt
           {t('adjustments.colorWarper.holdCompare')}
         </button>
       </div>
-      <output className="min-h-4 text-xs tabular-nums text-text-secondary" aria-live="off">
-        {selected !== null && polar.offsets[selected]
-          ? t('adjustments.colorWarper.deltaReadout', {
-              hue: ((polar.offsets[selected][0] * 180) / Math.PI).toFixed(1),
-              chroma: polar.offsets[selected][1].toFixed(3),
-              lightness: selectedSlice !== null ? ((polar.lightness?.[selectedSlice] ?? 0) * 100).toFixed(1) : '0.0',
-            })
-          : t('adjustments.colorWarper.precisionHint')}
-      </output>
+      {selected !== null && polar.offsets[selected] && (
+        <output className="text-xs tabular-nums text-text-secondary" aria-live="off">
+          {t('adjustments.colorWarper.deltaReadout', {
+            hue: ((polar.offsets[selected][0] * 180) / Math.PI).toFixed(1),
+            chroma: polar.offsets[selected][1].toFixed(3),
+            lightness: selectedSlice !== null ? ((polar.lightness?.[selectedSlice] ?? 0) * 100).toFixed(1) : '0.0',
+          })}
+        </output>
+      )}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         <label className="mr-auto flex items-center gap-1">
           <input
@@ -869,17 +803,90 @@ export default function PolarColorWarper({ adjustments, setAdjustments, onDragSt
           <Minimize2 size={15} />
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-1 text-xs">
-        {(['hue', 'chroma', 'lightness'] as const).map((channel) => (
-          <button
-            key={channel}
-            className="rounded-md bg-surface px-2 py-1.5 hover:bg-card-active"
-            onClick={() => resetChannel(channel)}
+      <details className="group border-t border-border-color pt-2">
+        <summary className="cursor-pointer text-xs text-text-secondary hover:text-text-primary">
+          {t('adjustments.colorWarper.moreOptions')}
+        </summary>
+        <div className="flex flex-col gap-3 pt-3">
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                ['spokes', polar.spokes, POLAR_SPOKES],
+                ['rings', polar.rings, POLAR_RINGS],
+                ['range', polar.chromaLimit, COLOR_WARPER_CHROMA_LIMITS],
+              ] as const
+            ).map(([key, value, options]) => (
+              <div key={key} className="flex min-w-0 flex-col gap-1">
+                <span className="text-xs text-text-secondary">{t(`adjustments.colorWarper.${key}`)}</span>
+                <Dropdown
+                  className="w-full"
+                  triggerClassName="bg-surface"
+                  value={value}
+                  options={options.map((v) => ({ value: v, label: String(v) }))}
+                  onChange={(v) => {
+                    setSelected(null);
+                    setSelectedSlice(null);
+                    setWheelSelection(new Set());
+                    setSliceSelection(new Set());
+                    update((p) =>
+                      resamplePolarWarper(
+                        p,
+                        key === 'spokes' ? Number(v) : p.spokes,
+                        key === 'rings' ? Number(v) : p.rings,
+                        key === 'range' ? Number(v) : p.chromaLimit,
+                      ),
+                    );
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+          <div
+            className="text-xs"
+            onBlur={() => {
+              angleSliderRef.current = null;
+            }}
           >
-            {t(`adjustments.colorWarper.reset_${channel}`)}
-          </button>
-        ))}
-      </div>
+            <Slider
+              label={t('adjustments.colorWarper.gridAngle')}
+              min={0}
+              max={359.9}
+              step={0.1}
+              defaultValue={0}
+              suffix="°"
+              value={polar.angle ?? 0}
+              onDragStateChange={(dragging) => {
+                if (!dragging) angleSliderRef.current = null;
+                onDragStateChange?.(dragging);
+              }}
+              onChange={(event) => {
+                angleSliderRef.current ??= structuredClone(polar);
+                const base = angleSliderRef.current;
+                update(() =>
+                  resamplePolarWarper(base, base.spokes, base.rings, base.chromaLimit, Number(event.target.value)),
+                );
+              }}
+              onPointerUp={() => {
+                angleSliderRef.current = null;
+              }}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-1 text-xs">
+            {(['hue', 'chroma', 'lightness'] as const).map((channel) => (
+              <button
+                key={channel}
+                className="rounded-md bg-surface px-2 py-1.5 hover:bg-card-active"
+                onClick={() => resetChannel(channel)}
+              >
+                {t(`adjustments.colorWarper.reset_${channel}`)}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-text-secondary">
+            {t(linked ? 'adjustments.colorWarper.linkedHelp' : 'adjustments.colorWarper.polarHelp')}
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

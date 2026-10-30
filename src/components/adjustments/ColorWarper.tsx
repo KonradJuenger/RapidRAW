@@ -1,3 +1,4 @@
+import ColorHarmonizer from './ColorHarmonizer';
 import PolarColorWarper from './PolarColorWarper';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Lock, LockOpen, RotateCcw, Undo2 } from 'lucide-react';
@@ -695,56 +696,6 @@ function GridColorWarper({ adjustments, setAdjustments, onDragStateChange }: Pro
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-text-secondary">{t('adjustments.colorWarper.help')}</p>
-      <div className="grid grid-cols-3 items-end gap-2">
-        <div className="flex min-w-0 flex-col gap-1">
-          <Text variant={TextVariants.label} color={TextColors.secondary}>
-            {t('adjustments.colorWarper.colorSpace')}
-          </Text>
-          <Dropdown
-            className="w-full"
-            triggerClassName="bg-surface"
-            value="oklab"
-            disabled
-            options={[{ value: 'oklab', label: 'OKLab' }]}
-            onChange={() => {}}
-          />
-        </div>
-        <div className="flex min-w-0 flex-col gap-1" data-tooltip={t('adjustments.colorWarper.rangeHint')}>
-          <Text variant={TextVariants.label} color={TextColors.secondary}>
-            {t('adjustments.colorWarper.range')}
-          </Text>
-          <Dropdown
-            className="w-full"
-            triggerClassName="bg-surface"
-            value={state.chromaLimit ?? COLOR_WARPER_DEFAULT_CHROMA_LIMIT}
-            options={COLOR_WARPER_CHROMA_LIMITS.map((limit) => ({
-              value: limit,
-              label: limit.toFixed(2),
-            }))}
-            onChange={(limit) => {
-              setSelected(new Set());
-              updateState((current) => resampleColorWarperChromaLimit(current, Number(limit)));
-            }}
-          />
-        </div>
-        <div className="flex min-w-0 flex-col gap-1" data-tooltip={t('adjustments.colorWarper.densityHint')}>
-          <Text variant={TextVariants.label} color={TextColors.secondary}>
-            {t('adjustments.colorWarper.grid')}
-          </Text>
-          <Dropdown
-            className="w-full"
-            triggerClassName="bg-surface"
-            value={state.gridSize}
-            options={COLOR_WARPER_GRID_SIZES.map((size) => ({ value: size, label: `${size} × ${size}` }))}
-            onChange={(size) => {
-              setSelected(new Set());
-              updateState((current) => resampleColorWarper(current, size as ColorWarperGridSize));
-            }}
-          />
-        </div>
-      </div>
-
       <PlaneEditor
         plane={0}
         active={activePlane === 0}
@@ -775,7 +726,6 @@ function GridColorWarper({ adjustments, setAdjustments, onDragStateChange }: Pro
         onNodeKeyDown={onNodeKeyDown}
         onPointerCancel={cancelGesture}
       />
-
       <div className="flex items-center gap-1">
         <button
           className="p-2 rounded-md bg-surface hover:bg-card-active disabled:opacity-40"
@@ -816,26 +766,70 @@ function GridColorWarper({ adjustments, setAdjustments, onDragStateChange }: Pro
           className="ml-auto px-2 py-1.5 rounded-md bg-surface hover:bg-card-active text-xs"
           onClick={() => {
             setSelected(new Set());
-            updateState(() => createDefaultColorWarper());
+            updateState(() => ({ ...createDefaultColorWarper(), mode: 'grid' }));
           }}
         >
           {t('adjustments.colorWarper.resetAll')}
         </button>
       </div>
+      <details className="group border-t border-border-color pt-2">
+        <summary className="cursor-pointer text-xs text-text-secondary hover:text-text-primary">
+          {t('adjustments.colorWarper.moreOptions')}
+        </summary>
+        <div className="flex flex-col gap-3 pt-3">
+          <div className="grid grid-cols-2 items-end gap-2">
+            <div className="flex min-w-0 flex-col gap-1" data-tooltip={t('adjustments.colorWarper.rangeHint')}>
+              <Text variant={TextVariants.label} color={TextColors.secondary}>
+                {t('adjustments.colorWarper.range')}
+              </Text>
+              <Dropdown
+                className="w-full"
+                triggerClassName="bg-surface"
+                value={state.chromaLimit ?? COLOR_WARPER_DEFAULT_CHROMA_LIMIT}
+                options={COLOR_WARPER_CHROMA_LIMITS.map((limit) => ({
+                  value: limit,
+                  label: limit.toFixed(2),
+                }))}
+                onChange={(limit) => {
+                  setSelected(new Set());
+                  updateState((current) => resampleColorWarperChromaLimit(current, Number(limit)));
+                }}
+              />
+            </div>
+            <div className="flex min-w-0 flex-col gap-1" data-tooltip={t('adjustments.colorWarper.densityHint')}>
+              <Text variant={TextVariants.label} color={TextColors.secondary}>
+                {t('adjustments.colorWarper.grid')}
+              </Text>
+              <Dropdown
+                className="w-full"
+                triggerClassName="bg-surface"
+                value={state.gridSize}
+                options={COLOR_WARPER_GRID_SIZES.map((size) => ({ value: size, label: `${size} × ${size}` }))}
+                onChange={(size) => {
+                  setSelected(new Set());
+                  updateState((current) => resampleColorWarper(current, size as ColorWarperGridSize));
+                }}
+              />
+            </div>
+          </div>
 
-      <Slider
-        label={t('adjustments.colorWarper.axisAngle')}
-        min={-180}
-        max={180}
-        step={1}
-        defaultValue={0}
-        suffix="°"
-        value={state.axisAngle > 180 ? state.axisAngle - 360 : state.axisAngle}
-        onChange={(event) =>
-          updateState((current) => ({ ...cloneColorWarper(current), axisAngle: Number(event.target.value) }))
-        }
-        onDragStateChange={onDragStateChange}
-      />
+          <Slider
+            label={t('adjustments.colorWarper.axisAngle')}
+            min={-180}
+            max={180}
+            step={1}
+            defaultValue={0}
+            suffix="°"
+            value={state.axisAngle > 180 ? state.axisAngle - 360 : state.axisAngle}
+            onChange={(event) =>
+              updateState((current) => ({ ...cloneColorWarper(current), axisAngle: Number(event.target.value) }))
+            }
+            onDragStateChange={onDragStateChange}
+          />
+
+          <p className="text-xs text-text-secondary">{t('adjustments.colorWarper.help')}</p>
+        </div>
+      </details>{' '}
     </div>
   );
 }
@@ -843,8 +837,13 @@ function GridColorWarper({ adjustments, setAdjustments, onDragStateChange }: Pro
 export default function ColorWarper(props: Props) {
   const { t } = useTranslation();
   const state = props.adjustments.colorWarper;
-  const polarCoordinates = state.mode === 'polar' || state.mode === 'linked';
-  const displayLimit = polarCoordinates ? state.polar?.chromaLimit : state.chromaLimit;
+  const polarCoordinates = state.mode === 'polar' || state.mode === 'linked' || state.mode === 'harmony';
+  const displayLimit =
+    state.mode === 'harmony'
+      ? state.harmonizer?.polar.chromaLimit
+      : polarCoordinates
+        ? state.polar?.chromaLimit
+        : state.chromaLimit;
   useLayoutEffect(() => {
     useEditorStore.getState().setEditor({ colorWarperDistribution: null });
   }, [polarCoordinates, displayLimit]);
@@ -860,6 +859,7 @@ export default function ColorWarper(props: Props) {
           triggerClassName="bg-surface"
           value={state.mode ?? 'grid'}
           options={[
+            { value: 'harmony', label: t('adjustments.colorWarper.harmonyMode') },
             { value: 'linked', label: t('adjustments.colorWarper.linkedMode') },
             { value: 'polar', label: t('adjustments.colorWarper.polarMode') },
             { value: 'grid', label: t('adjustments.colorWarper.gridMode') },
@@ -867,12 +867,14 @@ export default function ColorWarper(props: Props) {
           onChange={(mode) =>
             props.setAdjustments((previous) => ({
               ...previous,
-              colorWarper: { ...previous.colorWarper, mode: mode as 'grid' | 'polar' | 'linked' },
+              colorWarper: { ...previous.colorWarper, mode: mode as 'grid' | 'polar' | 'linked' | 'harmony' },
             }))
           }
         />
       </div>
-      {state.mode === 'polar' || state.mode === 'linked' ? (
+      {state.mode === 'harmony' ? (
+        <ColorHarmonizer {...props} />
+      ) : state.mode === 'polar' || state.mode === 'linked' ? (
         <PolarColorWarper {...props} />
       ) : (
         <GridColorWarper {...props} />

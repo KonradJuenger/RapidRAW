@@ -1,3 +1,4 @@
+import { createHarmonizer, normalizeHarmonizer, type HarmonizerState } from './colorHarmonizer';
 export { computeLinearGridInfluence } from './linearGridInfluence';
 import { createPolarWarper, normalizePolarWarper, type PolarWarperState } from './polarColorWarper';
 export const COLOR_WARPER_SCHEMA_VERSION = 2 as const;
@@ -25,7 +26,8 @@ export interface ColorWarperNeutralAxisState {
 }
 
 export interface ColorWarperState {
-  mode?: 'grid' | 'polar' | 'linked';
+  mode?: 'grid' | 'polar' | 'linked' | 'harmony';
+  harmonizer?: HarmonizerState;
   polar?: PolarWarperState;
   schemaVersion: 2;
   colorSpace: 'oklab';
@@ -77,6 +79,7 @@ export const createDefaultColorWarper = (
   chromaLimit: number = COLOR_WARPER_DEFAULT_CHROMA_LIMIT,
 ): ColorWarperState => ({
   mode: 'linked',
+  harmonizer: createHarmonizer(),
   polar: createPolarWarper(),
   schemaVersion: COLOR_WARPER_SCHEMA_VERSION,
   colorSpace: 'oklab',
@@ -182,15 +185,17 @@ export const normalizeColorWarper = (raw: unknown): ColorWarperState => {
     return { ...createDefaultColorWarper(), unsupportedState: raw };
   }
   const polar = normalizePolarWarper(value.polar);
+  const harmonizer = normalizeHarmonizer(value.harmonizer);
   if (
-    (value.mode !== undefined && value.mode !== 'grid' && value.mode !== 'polar' && value.mode !== 'linked') ||
-    !polar
+    (value.mode !== undefined && value.mode !== 'grid' && value.mode !== 'polar' && value.mode !== 'linked' && value.mode !== 'harmony') ||
+    !polar || !harmonizer
   ) {
     return { ...createDefaultColorWarper(), unsupportedState: raw };
   }
   const normalized = createDefaultColorWarper(gridSize, chromaLimit);
   normalized.mode = value.mode ?? 'grid';
   normalized.polar = polar;
+  normalized.harmonizer = harmonizer;
   if (value.unsupportedState !== undefined) normalized.unsupportedState = value.unsupportedState;
   normalized.axisAngle = ((finite(value.axisAngle) % 360) + 360) % 360;
 
@@ -221,6 +226,7 @@ export const normalizeColorWarper = (raw: unknown): ColorWarperState => {
 export const cloneColorWarper = (state: ColorWarperState): ColorWarperState => ({
   ...state,
   polar: structuredClone(state.polar ?? createPolarWarper()),
+  harmonizer: structuredClone(state.harmonizer ?? createHarmonizer()),
   chromaLimit: state.chromaLimit ?? COLOR_WARPER_DEFAULT_CHROMA_LIMIT,
   planes: state.planes.map((plane) => ({
     offsets: plane.offsets.map(([x, y]) => [x, y] as ColorWarperOffset),
@@ -233,7 +239,9 @@ export const cloneColorWarper = (state: ColorWarperState): ColorWarperState => (
 });
 
 export const isColorWarperIdentity = (state: ColorWarperState): boolean =>
-  state.mode === 'polar' || state.mode === 'linked'
+  state.mode === 'harmony'
+    ? (state.harmonizer?.polar.offsets.every(([h, c]) => h === 0 && c === 0) ?? true)
+    : state.mode === 'polar' || state.mode === 'linked'
     ? (state.polar?.offsets.every(([h, c]) => h === 0 && c === 0) ?? true) &&
       (state.polar?.neutral?.every((v) => v === 0) ?? true) &&
       (state.mode !== 'linked' ||
